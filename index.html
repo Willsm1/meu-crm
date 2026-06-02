@@ -199,6 +199,7 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
   <button class="nav-tab" onclick="showPage('relatorio',this)"><i class="ti ti-chart-line"></i> Relatório</button>
   <div class="nav-spacer"></div>
   <button class="nav-btn" id="refresh-btn" onclick="refreshCRM()" title="Atualizar dados do CRM"><i class="ti ti-refresh"></i> Atualizar</button>
+  <button class="nav-btn" onclick="removerDuplicatas()" title="Remover leads duplicados" style="color:#fcd34d"><i class="ti ti-copy-off"></i> Remover Duplicatas</button>
   <button class="nav-btn" onclick="showPage('relatorio',document.querySelector('.nav-tab[onclick*=relatorio]'))" style="display:none" id="nav-rel-btn"></button>
   <button class="nav-btn" onclick="syncToSheets(true)" title="Salvar todos os leads no Google Sheets agora">
     <i class="ti ti-brand-google"></i> Salvar no Sheets
@@ -761,15 +762,16 @@ function load(){
     leads = parse(localStorage.getItem('crm_leads'));
     try{ calls=JSON.parse(localStorage.getItem('crm_calls')||'[]'); }catch{ calls=[]; }
     renderAll();
-    // If no leads locally, try loading from Google Sheets
-    if(leads.length===0) setTimeout(()=>loadFromSheets(),1000);
+    // Auto-load from Sheets only once on first open if storage is empty
+    if(leads.length===0&&!_loadingSheetsLock) setTimeout(()=>loadFromSheets(),1500);
   }
 }
 const SHEETS_URL='https://script.google.com/macros/s/AKfycbwRU4zq-wYtyovOfGpjg13R-NXeVNb7LA9kzdur21QWlfxXcUEVdfACsO3ZHe2AwQxy/exec';
 let _sheetsSyncTimer=null;
 
 function save(){
-  const normalized=leads.map(l=>({...l,id:String(l.id)}));
+  const normalized=deduplicateLeads(leads.map(l=>({...l,id:String(l.id)})));
+  leads=normalized;
   const json=JSON.stringify(normalized);
   localStorage.setItem('crm_leads', json);
   // Direct chrome.storage (extension page)
@@ -802,15 +804,19 @@ function syncToSheets(showFeedback=true){
   .catch(e=>{ if(showFeedback) showToast('⚠ Sheets offline: '+e.message); });
 }
 
+let _loadingSheetsLock=false;
 function loadFromSheets(){
   if(!SHEETS_URL) return;
+  // Prevent multiple simultaneous loads
+  if(_loadingSheetsLock){ showToast('⚠ Já está carregando...'); return; }
+  _loadingSheetsLock=true;
   showToast('🔄 Carregando leads do Google Sheets...');
   fetch(SHEETS_URL)
   .then(r=>r.json())
   .then(d=>{
+    _loadingSheetsLock=false;
     if(d.ok&&d.leads&&d.leads.length>0){
-      // Map sheet columns back to lead format
-      leads=d.leads.map(l=>({
+      const loaded=d.leads.map(l=>({
         id:String(l.id||Date.now()+Math.floor(Math.random()*9999)),
         nome:l.nome||'',
         empresa:l.empresa||'',
@@ -822,18 +828,62 @@ function loadFromSheets(){
         origem:l.origem||'',
         notas:l.anotações||l.notas||''
       }));
+      // Deduplicate before applying
+      leads=deduplicateLeads(loaded);
       const json=JSON.stringify(leads);
       localStorage.setItem('crm_leads',json);
       if(typeof chrome!=='undefined'&&chrome.storage&&chrome.storage.local){
         chrome.storage.local.set({'crm_leads':json});
       }
       renderAll();
-      showToast('✅ '+leads.length+' leads carregados do Google Sheets!');
+      const removed=loaded.length-leads.length;
+      showToast('✅ '+leads.length+' leads carregados'+(removed>0?' ('+removed+' duplicatas removidas)':'')+'!');
     } else {
       showToast('⚠ Nenhum lead encontrado no Sheets.');
     }
   })
-  .catch(e=>showToast('⚠ Erro ao carregar Sheets: '+e.message));
+  .catch(e=>{ _loadingSheetsLock=false; showToast('⚠ Erro ao carregar Sheets: '+e.message); });
+}
+
+function deduplicateLeads(arr){
+  const seenPhone=new Map(), seenName=new Map(), result=[];
+  arr.forEach(l=>{
+    const phone=l.telefone?l.telefone.replace(/\D/g,''):'';
+    const name=(l.nome||'').toLowerCase().trim();
+    // Check by phone first (most reliable)
+    if(phone.length>=8){
+      if(seenPhone.has(phone)){
+        // Keep the one with more data (non-empty status, notes, etc)
+        const existing=seenPhone.get(phone);
+        const score=l=>(l.nome?1:0)+(l.status&&l.status!=='Novo'?2:0)+(l.notas?1:0)+(l.valor?1:0);
+        if(score(l)>score(existing)){
+          const idx=result.indexOf(existing);
+          if(idx>-1){ result[idx]=l; seenPhone.set(phone,l); }
+        }
+        return; // skip duplicate
+      }
+      seenPhone.set(phone,l);
+    } else if(name.length>1){
+      // Fallback: deduplicate by name
+      if(seenName.has(name)) return;
+      seenName.set(name,l);
+    }
+    result.push(l);
+  });
+  return result;
+}
+
+function removerDuplicatas(){
+  const before=leads.length;
+  leads=deduplicateLeads(leads);
+  const removed=before-leads.length;
+  if(removed>0){
+    save();
+    renderAll();
+    showToast('✅ '+removed+' duplicatas removidas! '+leads.length+' leads únicos.');
+  } else {
+    showToast('✓ Nenhuma duplicata encontrada.');
+  }
 }
 function fmt(v){return v?'R$ '+Number(v).toLocaleString('pt-BR'):'—'}
 function fmtDate(d){return d?new Date(d+'T12:00:00').toLocaleDateString('pt-BR'):'—'}
