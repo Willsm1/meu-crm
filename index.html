@@ -1612,6 +1612,23 @@ function showToast(msg){
   _toastTimer=setTimeout(()=>t.classList.remove('show'),3000);
 }
 load();
+
+// Listen for changes from extension (WhatsApp sync) and auto-refresh
+if(typeof chrome !== 'undefined' && chrome.storage) {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if(area === 'local' && changes.crm_leads) {
+      const newLeads = changes.crm_leads.newValue;
+      if(newLeads) {
+        try{
+          leads = JSON.parse(newLeads).map(l=>({...l,id:String(l.id)}));
+          localStorage.setItem('crm_leads', newLeads);
+          renderAll();
+          showToast('🔄 CRM atualizado pela extensão!');
+        }catch(e){}
+      }
+    }
+  });
+}
 </script>
 
 
