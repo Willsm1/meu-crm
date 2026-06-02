@@ -200,6 +200,12 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
   <div class="nav-spacer"></div>
   <button class="nav-btn" id="refresh-btn" onclick="refreshCRM()" title="Atualizar dados do CRM"><i class="ti ti-refresh"></i> Atualizar</button>
   <button class="nav-btn" onclick="showPage('relatorio',document.querySelector('.nav-tab[onclick*=relatorio]'))" style="display:none" id="nav-rel-btn"></button>
+  <button class="nav-btn" onclick="syncToSheets(true)" title="Salvar todos os leads no Google Sheets agora">
+    <i class="ti ti-brand-google"></i> Salvar no Sheets
+  </button>
+  <button class="nav-btn" onclick="loadFromSheets()" title="Carregar leads do Google Sheets">
+    <i class="ti ti-cloud-download"></i> Carregar do Sheets
+  </button>
   <button class="nav-btn" id="sync-ext-btn" onclick="syncExtension()" title="Sincronizar leads com a extensão WhatsApp">
     <i class="ti ti-brand-whatsapp"></i> Sincronizar extensão
   </button>
@@ -757,17 +763,75 @@ function load(){
     leads = parse(localStorage.getItem('crm_leads'));
     try{ calls=JSON.parse(localStorage.getItem('crm_calls')||'[]'); }catch{ calls=[]; }
     renderAll();
+    // If no leads locally, try loading from Google Sheets
+    if(leads.length===0) setTimeout(()=>loadFromSheets(),1000);
   }
 }
+const SHEETS_URL='https://script.google.com/macros/s/AKfycbwRU4zq-wYtyovOfGpjg13R-NXeVNb7LA9kzdur21QWlfxXcUEVdfACsO3ZHe2AwQxy/exec';
+let _sheetsSyncTimer=null;
+
 function save(){
   const normalized=leads.map(l=>({...l,id:String(l.id)}));
   const json=JSON.stringify(normalized);
   localStorage.setItem('crm_leads', json);
-  // Auto-sync to extension if available
   if(typeof chrome!=='undefined'&&chrome.storage&&chrome.storage.local){
     chrome.storage.local.set({'crm_leads':json});
   }
   leads=normalized;
+  // Debounce Google Sheets sync — wait 3s after last save to batch updates
+  clearTimeout(_sheetsSyncTimer);
+  _sheetsSyncTimer=setTimeout(()=>syncToSheets(false), 3000);
+}
+
+function syncToSheets(showFeedback=true){
+  if(!SHEETS_URL) return;
+  fetch(SHEETS_URL, {
+    method:'POST',
+    body: JSON.stringify({action:'sync', leads:leads}),
+  })
+  .then(r=>r.json())
+  .then(d=>{
+    if(d.ok){
+      if(showFeedback) showToast('✅ '+d.total+' leads salvos no Google Sheets!');
+    } else {
+      if(showFeedback) showToast('⚠ Erro ao salvar no Sheets: '+(d.error||''));
+    }
+  })
+  .catch(e=>{ if(showFeedback) showToast('⚠ Sheets offline: '+e.message); });
+}
+
+function loadFromSheets(){
+  if(!SHEETS_URL) return;
+  showToast('🔄 Carregando leads do Google Sheets...');
+  fetch(SHEETS_URL)
+  .then(r=>r.json())
+  .then(d=>{
+    if(d.ok&&d.leads&&d.leads.length>0){
+      // Map sheet columns back to lead format
+      leads=d.leads.map(l=>({
+        id:String(l.id||Date.now()+Math.floor(Math.random()*9999)),
+        nome:l.nome||'',
+        empresa:l.empresa||'',
+        email:l.email||'',
+        telefone:l.telefone||'',
+        status:l.status||'Novo',
+        valor:l.valor||'',
+        data:l.data||'',
+        origem:l.origem||'',
+        notas:l.anotações||l.notas||''
+      }));
+      const json=JSON.stringify(leads);
+      localStorage.setItem('crm_leads',json);
+      if(typeof chrome!=='undefined'&&chrome.storage&&chrome.storage.local){
+        chrome.storage.local.set({'crm_leads':json});
+      }
+      renderAll();
+      showToast('✅ '+leads.length+' leads carregados do Google Sheets!');
+    } else {
+      showToast('⚠ Nenhum lead encontrado no Sheets.');
+    }
+  })
+  .catch(e=>showToast('⚠ Erro ao carregar Sheets: '+e.message));
 }
 function fmt(v){return v?'R$ '+Number(v).toLocaleString('pt-BR'):'—'}
 function fmtDate(d){return d?new Date(d+'T12:00:00').toLocaleDateString('pt-BR'):'—'}
