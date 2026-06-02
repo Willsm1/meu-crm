@@ -115,9 +115,8 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
 .empty i{font-size:32px;display:block;margin-bottom:10px;opacity:.4}
 
 /* KANBAN */
-.kanban{display:flex;flex-direction:row;gap:10px;overflow-x:auto;padding-bottom:.75rem;align-items:flex-start}
-.k-col{flex:0 0 200px;min-width:200px}
-.k-col{background:var(--bg-card);border-radius:var(--radius-lg);border:0.5px solid var(--border);padding:10px;min-height:300px}
+.kanban{display:flex;flex-direction:row;flex-wrap:nowrap;gap:10px;overflow-x:auto;padding-bottom:.75rem;align-items:flex-start;width:100%}
+.k-col{flex:0 0 220px;min-width:220px;background:var(--bg-card);border-radius:var(--radius-lg);border:0.5px solid var(--border);padding:10px;min-height:300px}
 .k-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:8px;border-bottom:0.5px solid var(--border)}
 .k-title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
 .k-count{font-size:11px;background:var(--bg-surface);color:var(--text-muted);padding:1px 7px;border-radius:20px}
@@ -207,9 +206,7 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
   <button class="nav-btn" onclick="loadFromSheets()" title="Carregar leads do Google Sheets">
     <i class="ti ti-cloud-download"></i> Carregar do Sheets
   </button>
-  <button class="nav-btn" id="sync-ext-btn" onclick="syncExtension()" title="Sincronizar leads com a extensão WhatsApp">
-    <i class="ti ti-brand-whatsapp"></i> Sincronizar extensão
-  </button>
+
   <button class="nav-btn primary" onclick="openModal()"><i class="ti ti-plus"></i> Novo lead</button>
 </nav>
 
