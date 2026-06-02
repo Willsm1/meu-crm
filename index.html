@@ -848,7 +848,7 @@ function loadFromSheets(){
 function deduplicateLeads(arr){
   const seenPhone=new Map(), seenName=new Map(), result=[];
   arr.forEach(l=>{
-    const phone=l.telefone?l.telefone.replace(/\D/g,''):'';
+    const phone=l.telefone?String(l.telefone).replace(/\D/g,''):'';
     const name=(l.nome||'').toLowerCase().trim();
     // Check by phone first (most reliable)
     if(phone.length>=8){
