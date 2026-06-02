@@ -181,6 +181,10 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
 .nota-tag{display:inline-block;background:var(--bg-surface);border-radius:4px;padding:2px 7px;font-size:11px;color:var(--text-muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:0.5px solid var(--border);cursor:default}
 @keyframes spin{to{transform:rotate(360deg)}}
 ::-webkit-scrollbar{width:5px;height:5px}
+/* Progress bar */
+#crm-progress-bar{position:fixed;top:0;left:0;width:100%;height:3px;z-index:9999;background:rgba(59,130,246,0.15);display:none}
+#crm-progress-bar .bar{height:3px;background:linear-gradient(90deg,#3b82f6,#60a5fa,#93c5fd);border-radius:0 2px 2px 0;transition:width .3s ease;width:0%}
+#crm-progress-bar .label{position:fixed;top:6px;left:50%;transform:translateX(-50%);font-size:11px;color:#93c5fd;background:rgba(14,22,40,0.9);padding:3px 12px;border-radius:20px;border:0.5px solid rgba(59,130,246,0.3);white-space:nowrap}
 .exp-check{display:flex;align-items:center;gap:8px;cursor:pointer;padding:3px 0}
 .exp-check input{flex-shrink:0}
 .toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(20px);background:var(--bg-surface);border:0.5px solid var(--border-hi);color:var(--text-primary);padding:10px 20px;border-radius:var(--radius-lg);font-size:13px;z-index:9999;opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap}
@@ -193,6 +197,7 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
 <body>
 
 <!-- NAV -->
+<div id="crm-progress-bar"><div class="bar" id="crm-pb-fill"></div><div class="label" id="crm-pb-label"></div></div>
 <nav class="nav">
   <div class="nav-brand"><i class="ti ti-address-book"></i> Meu CRM</div>
   <button class="nav-tab active" onclick="showPage('leads',this)"><i class="ti ti-list"></i> Leads</button>
@@ -423,6 +428,35 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+
+
+// ─── PROGRESS BAR ─────────────────────────────────────────────────────────────
+let _pbTimer=null;
+function showProgress(label='Sincronizando...', pct=0){
+  const bar=document.getElementById('crm-progress-bar');
+  const fill=document.getElementById('crm-pb-fill');
+  const lbl=document.getElementById('crm-pb-label');
+  if(!bar) return;
+  bar.style.display='block';
+  if(fill) fill.style.width=pct+'%';
+  if(lbl) lbl.textContent=label;
+}
+function updateProgress(label, pct){
+  const fill=document.getElementById('crm-pb-fill');
+  const lbl=document.getElementById('crm-pb-label');
+  if(fill) fill.style.width=pct+'%';
+  if(lbl) lbl.textContent=label;
+}
+function hideProgress(){
+  const bar=document.getElementById('crm-progress-bar');
+  const fill=document.getElementById('crm-pb-fill');
+  if(fill) fill.style.width='100%';
+  clearTimeout(_pbTimer);
+  _pbTimer=setTimeout(()=>{
+    if(bar) bar.style.display='none';
+    if(fill) fill.style.width='0%';
+  },800);
+}
 
 // ─── EXPORT PAGE ─────────────────────────────────────────────────────────────
 const STATUS_LABEL={
@@ -769,7 +803,7 @@ function searchNotas(){
   if(countEl) countEl.textContent=matched.length?matched.length+'':'0';
   
   // Show matched leads highlighted
-  const tbody=document.getElementById('leads-tbody');
+  const tbody=document.getElementById('tbody');
   if(!tbody) return;
   
   if(!matched.length){
@@ -857,48 +891,137 @@ function save(){
   _sheetsSyncTimer=setTimeout(()=>syncToSheets(false), 3000);
 }
 
+let _lastSyncTime=null; // track last successful sync
+
 function syncToSheets(showFeedback=true){
   if(!SHEETS_URL) return;
-  fetch(SHEETS_URL, {
-    method:'POST',
-    body: JSON.stringify({action:'sync', leads:leads}),
+  showProgress('☁ Sincronizando '+leads.length+' leads...', 5);
+  let pct=5;
+  const anim=setInterval(()=>{
+    pct=Math.min(pct+7, 80);
+    updateProgress('☁ Enviando dados para o Sheets...', pct);
+  }, 400);
+
+  // Step 1: Load existing Sheets data to merge
+  updateProgress('☁ Lendo dados existentes no Sheets...', 15);
+  fetch(SHEETS_URL)
+  .then(r=>r.json())
+  .then(existing=>{
+    updateProgress('☁ Mesclando dados...', 40);
+    // Build map of existing leads by phone
+    const sheetsMap=new Map();
+    if(existing.ok && existing.leads){
+      existing.leads.forEach(l=>{
+        const phone=String(l.telefone||'').replace(/\D/g,'');
+        if(phone.length>=8) sheetsMap.set(phone, l);
+        else sheetsMap.set(String(l.id||''), l);
+      });
+    }
+
+    // Merge: local leads override sheets (local is source of truth)
+    // New leads in sheets that don't exist locally → add to local
+    const localPhones=new Set(leads.map(l=>String(l.telefone||'').replace(/\D/g,'')));
+    const sheetsOnlyLeads=[];
+    sheetsMap.forEach((l,key)=>{
+      const phone=String(l.telefone||'').replace(/\D/g,'');
+      if(phone.length>=8 && !localPhones.has(phone)){
+        sheetsOnlyLeads.push({
+          id:String(l.id||Date.now()),
+          nome:l.nome||'',telefone:l.telefone||'',
+          status:l.status||'Novo',notas:l.anotações||l.notas||'',
+          empresa:l.empresa||'',email:l.email||'',
+          valor:l.valor||'',data:l.data||'',origem:l.origem||''
+        });
+      }
+    });
+
+    // Final merged list: all local leads + sheets-only leads
+    const merged=[...leads, ...sheetsOnlyLeads];
+    const deduped=deduplicateLeads(merged);
+
+    if(sheetsOnlyLeads.length>0){
+      leads=deduped;
+      const json=JSON.stringify(leads);
+      localStorage.setItem('crm_leads',json);
+      if(typeof chrome!=='undefined'&&chrome.storage&&chrome.storage.local){
+        chrome.storage.local.set({'crm_leads':json});
+      }
+    }
+
+    updateProgress('☁ Salvando no Sheets...', 65);
+    // Now push merged data to Sheets
+    return fetch(SHEETS_URL, {
+      method:'POST',
+      body: JSON.stringify({action:'sync', leads:deduped}),
+    });
   })
   .then(r=>r.json())
   .then(d=>{
+    clearInterval(anim);
+    _lastSyncTime=new Date();
     if(d.ok){
-      if(showFeedback) showToast('✅ '+d.total+' leads salvos no Google Sheets!');
+      updateProgress('✅ '+d.total+' leads sincronizados!', 100);
+      hideProgress();
+      if(showFeedback){
+        showToast('✅ '+d.total+' leads salvos no Google Sheets!');
+        renderAll();
+      }
     } else {
-      if(showFeedback) showToast('⚠ Erro ao salvar no Sheets: '+(d.error||''));
+      hideProgress();
+      if(showFeedback) showToast('⚠ Erro no Sheets: '+(d.error||''));
     }
   })
-  .catch(e=>{ if(showFeedback) showToast('⚠ Sheets offline: '+e.message); });
+  .catch(e=>{ clearInterval(anim); hideProgress(); if(showFeedback) showToast('⚠ Sheets offline: '+e.message); });
 }
 
 let _loadingSheetsLock=false;
 function loadFromSheets(){
   if(!SHEETS_URL) return;
-  // Prevent multiple simultaneous loads
   if(_loadingSheetsLock){ showToast('⚠ Já está carregando...'); return; }
+
+  // ⚠ Avisar se há dados locais não salvos
+  const hasUnsaved=leads.length>0 && !_lastSyncTime;
+  const syncedAgo=_lastSyncTime?Math.round((Date.now()-_lastSyncTime)/60000):null;
+  const oldSync=syncedAgo!==null&&syncedAgo>30;
+
+  if(hasUnsaved){
+    const ok=confirm(
+      '⚠ ATENÇÃO: Você tem '+leads.length+' leads locais que NÃO foram salvos no Sheets ainda.\n\n'+
+      'Se carregar agora, pode PERDER dados não sincronizados.\n\n'+
+      'Recomendado:\n'+
+      '1. Cancele agora\n'+
+      '2. Clique em "Salvar no Sheets"\n'+
+      '3. Depois clique em "Carregar do Sheets"\n\n'+
+      'Deseja carregar mesmo assim e PERDER os dados locais?'
+    );
+    if(!ok) return;
+  } else if(oldSync){
+    const ok=confirm(
+      '⚠ Último backup foi há '+syncedAgo+' minutos.\n\n'+
+      'Pode haver alterações locais não sincronizadas.\n\n'+
+      'Deseja carregar do Sheets mesmo assim?'
+    );
+    if(!ok) return;
+  }
+
   _loadingSheetsLock=true;
-  showToast('🔄 Carregando leads do Google Sheets...');
+  showProgress('⬇ Conectando ao Google Sheets...', 5);
+  let pct2=5;
+  const anim2=setInterval(()=>{ pct2=Math.min(pct2+6,80); updateProgress('⬇ Carregando leads...', pct2); },500);
+
   fetch(SHEETS_URL)
   .then(r=>r.json())
   .then(d=>{
+    clearInterval(anim2);
     _loadingSheetsLock=false;
     if(d.ok&&d.leads&&d.leads.length>0){
       const loaded=d.leads.map(l=>({
         id:String(l.id||Date.now()+Math.floor(Math.random()*9999)),
-        nome:l.nome||'',
-        empresa:l.empresa||'',
-        email:l.email||'',
-        telefone:l.telefone||'',
-        status:l.status||'Novo',
-        valor:l.valor||'',
-        data:l.data||'',
-        origem:l.origem||'',
+        nome:l.nome||'',empresa:l.empresa||'',email:l.email||'',
+        telefone:l.telefone||'',status:l.status||'Novo',
+        valor:l.valor||'',data:l.data||'',origem:l.origem||'',
         notas:l.anotações||l.notas||''
       }));
-      // Deduplicate before applying
       leads=deduplicateLeads(loaded);
       const json=JSON.stringify(leads);
       localStorage.setItem('crm_leads',json);
@@ -906,13 +1029,17 @@ function loadFromSheets(){
         chrome.storage.local.set({'crm_leads':json});
       }
       renderAll();
+      updateProgress('✅ '+leads.length+' leads carregados!', 100);
+      hideProgress();
+      _lastSyncTime=new Date();
       const removed=loaded.length-leads.length;
       showToast('✅ '+leads.length+' leads carregados'+(removed>0?' ('+removed+' duplicatas removidas)':'')+'!');
     } else {
+      hideProgress();
       showToast('⚠ Nenhum lead encontrado no Sheets.');
     }
   })
-  .catch(e=>{ _loadingSheetsLock=false; showToast('⚠ Erro ao carregar Sheets: '+e.message); });
+  .catch(e=>{ clearInterval(anim2); _loadingSheetsLock=false; hideProgress(); showToast('⚠ Erro ao carregar Sheets: '+e.message); });
 }
 
 function deduplicateLeads(arr){
