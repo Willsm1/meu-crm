@@ -92,6 +92,10 @@ tr:hover td{background:var(--bg-hover)}
 .b-fechado{background:rgba(34,197,94,.15);color:#86efac;border:0.5px solid rgba(34,197,94,.3)}
 .b-perdido{background:rgba(239,68,68,.15);color:#fca5a5;border:0.5px solid rgba(239,68,68,.3)}
 .b-gold{background:rgba(234,179,8,.18);color:#fde047;border:0.5px solid rgba(234,179,8,.4)}
+.b-manter{background:rgba(99,102,241,.18);color:#a5b4fc;border:0.5px solid rgba(99,102,241,.4)}
+.b-pronto{background:rgba(16,185,129,.18);color:#6ee7b7;border:0.5px solid rgba(16,185,129,.4)}
+.b-moradia{background:rgba(245,158,11,.18);color:#fcd34d;border:0.5px solid rgba(245,158,11,.4)}
+.b-critico{background:rgba(239,68,68,.25);color:#fca5a5;border:1px solid rgba(239,68,68,.6);font-weight:700}
 .b-interacoes{background:rgba(34,211,238,.15);color:#22d3ee;border:0.5px solid rgba(34,211,238,.3)}
 
 .icon-btn{background:none;border:none;cursor:pointer;padding:4px 6px;color:var(--text-muted);font-size:15px;border-radius:4px;transition:all .1s}
@@ -257,6 +261,7 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
   </div>
   <div class="toolbar">
     <input type="text" id="search" placeholder="Buscar nome, empresa, email, telefone..." oninput="renderLeads()">
+    <input type="text" id="search-notas" oninput="searchNotas()" placeholder="🔍 Buscar nas anotações..." style="background:var(--bg-input);border:0.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:13px;padding:6px 12px;width:220px;outline:none;font-family:inherit;margin-left:8px">
     <select id="filterStatus" onchange="renderLeads()">
       <option value="">Todos os status</option>
       <option>Novo</option><option>Contato feito</option><option>Em negociação</option>
@@ -553,9 +558,10 @@ function copyExport(){
 // ─── DATA ────────────────────────────────────────────────────────────────────
 const STATUS_CLASS={
   'Novo':'b-novo','Contato feito':'b-contato','Interações':'b-interacoes','Em negociação':'b-negociacao',
-  'Proposta enviada':'b-proposta','Fechado':'b-fechado','Perdido':'b-perdido','Gold ⭐':'b-gold'
+  'Proposta enviada':'b-proposta','Fechado':'b-fechado','Perdido':'b-perdido','Gold ⭐':'b-gold',
+  'Manter Atualizado':'b-manter','Pronto':'b-pronto','Moradia':'b-moradia','Crítico':'b-critico'
 };
-const STATUSES=['Novo','Contato feito','Interações','Em negociação','Proposta enviada','Fechado','Perdido','Gold ⭐'];
+const STATUSES=['Novo','Contato feito','Interações','Em negociação','Proposta enviada','Fechado','Perdido','Gold ⭐','Manter Atualizado','Pronto','Moradia','Crítico'];
 let leads=[], editingId=null, pendingImport=[], chartMes=null;
 
 function syncExtension(){
@@ -745,6 +751,70 @@ function exportarRelatorio(){
   showToast(`✅ Relatório exportado — ${filtered.length} leads`);
 }
 
+// ─── BUSCA NAS ANOTAÇÕES ──────────────────────────────────────────────────────
+function searchNotas(){
+  const q=(document.getElementById('search-notas').value||'').trim().toLowerCase();
+  const countEl=document.getElementById('search-notas-count');
+  if(!q){ if(countEl) countEl.textContent=''; renderLeads(); return; }
+  
+  // Split query into words for flexible matching
+  const words=q.split(/\s+/).filter(Boolean);
+  
+  const matched=leads.filter(l=>{
+    const text=(l.notas||'').toLowerCase();
+    // All words must appear somewhere in the notes
+    return words.every(w=>text.includes(w));
+  });
+  
+  if(countEl) countEl.textContent=matched.length?matched.length+'':'0';
+  
+  // Show matched leads highlighted
+  const tbody=document.getElementById('leads-tbody');
+  if(!tbody) return;
+  
+  if(!matched.length){
+    tbody.innerHTML='<tr><td colspan="10" style="padding:2rem;text-align:center;color:var(--text-muted)">Nenhuma anotação encontrada para "'+q+'"</td></tr>';
+    return;
+  }
+  
+  // Highlight the matching text in notes
+  window._currentList=[...matched];
+  tbody.innerHTML=matched.map((l,rowIdx)=>{
+    const sid=String(l.id);
+    const notaHighlight=highlight(l.notas||'',words);
+    return '<tr>'+
+      '<td style="text-align:center"><input type="checkbox" class="cb row-cb" data-id="'+sid+'"></td>'+
+      '<td style="font-weight:500;color:#93c5fd">'+escHtml(l.nome||'—')+'</td>'+
+      '<td style="color:var(--text-secondary)">'+escHtml(l.empresa||'—')+'</td>'+
+      '<td style="font-size:12px;color:var(--text-muted)">'+(l.telefone?'<div>'+l.telefone+'</div>':'')+'</td>'+
+      '<td><span class="badge '+(STATUS_CLASS[l.status]||'b-novo')+'">'+escHtml(l.status||'Novo')+'</span></td>'+
+      '<td style="color:var(--text-secondary)">'+fmt(l.valor)+'</td>'+
+      '<td style="color:var(--text-muted)">'+fmtDate(l.data)+'</td>'+
+      '<td style="color:var(--text-muted)">'+escHtml(l.origem||'—')+'</td>'+
+      '<td style="max-width:200px;font-size:11px;color:#93c5fd">'+notaHighlight+'</td>'+
+      '<td style="text-align:center">'+
+        '<button class="icon-btn" data-action="openModal" data-id="'+sid+'" title="Editar"><i class="ti ti-edit"></i></button>'+
+        '<button class="icon-btn danger" data-action="deleteByIdx" data-idx="'+rowIdx+'" title="Excluir"><i class="ti ti-trash"></i></button>'+
+      '</td></tr>';
+  }).join('');
+  tbody.querySelectorAll('.row-cb').forEach(cb=>{
+    cb.addEventListener('change',()=>toggleRow(cb.dataset.id,cb));
+  });
+}
+
+function highlight(text, words){
+  if(!text) return '—';
+  let result=escHtml(text.slice(0,200)+(text.length>200?'...':''));
+  words.forEach(w=>{
+    const re=new RegExp('('+w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')', 'gi');
+    result=result.replace(re,'<mark style="background:rgba(250,204,21,0.35);color:#fef08a;border-radius:2px;padding:0 2px">$1</mark>');
+  });
+  return result;
+}
+
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+
 let calls=[];
 function load(){
   const parse = raw => {
@@ -846,16 +916,15 @@ function loadFromSheets(){
 }
 
 function deduplicateLeads(arr){
-  const seenPhone=new Map(), seenName=new Map(), result=[];
+  // Deduplication by PHONE NUMBER ONLY (exact match after stripping non-digits)
+  const seenPhone=new Map(), result=[];
   arr.forEach(l=>{
-    const phone=l.telefone?String(l.telefone).replace(/\D/g,''):'';
-    const name=(l.nome||'').toLowerCase().trim();
-    // Check by phone first (most reliable)
+    const phone=String(l.telefone||'').replace(/\D/g,'');
     if(phone.length>=8){
       if(seenPhone.has(phone)){
-        // Keep the one with more data (non-empty status, notes, etc)
+        // Keep the lead with more data
         const existing=seenPhone.get(phone);
-        const score=l=>(l.nome?1:0)+(l.status&&l.status!=='Novo'?2:0)+(l.notas?1:0)+(l.valor?1:0);
+        const score=x=>(x.nome?1:0)+(x.status&&x.status!=='Novo'?2:0)+(x.notas?1:0)+(x.valor?1:0);
         if(score(l)>score(existing)){
           const idx=result.indexOf(existing);
           if(idx>-1){ result[idx]=l; seenPhone.set(phone,l); }
@@ -863,10 +932,10 @@ function deduplicateLeads(arr){
         return; // skip duplicate
       }
       seenPhone.set(phone,l);
-    } else if(name.length>1){
-      // Fallback: deduplicate by name
-      if(seenName.has(name)) return;
-      seenName.set(name,l);
+    } else {
+      // No phone — always keep (can't determine duplicate)
+      result.push(l);
+      return;
     }
     result.push(l);
   });
