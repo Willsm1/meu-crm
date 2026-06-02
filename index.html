@@ -180,7 +180,7 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
 .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;background:var(--bg-surface);color:var(--text-muted);border:0.5px solid var(--border)}
 .nota-tag{display:inline-block;background:var(--bg-surface);border-radius:4px;padding:2px 7px;font-size:11px;color:var(--text-muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:0.5px solid var(--border);cursor:default}
 @keyframes spin{to{transform:rotate(360deg)}}
-#search{flex:1;min-width:200px}
+#search-leads{flex:1;min-width:200px}
 ::-webkit-scrollbar{width:5px;height:5px}
 /* Progress bar */
 #crm-progress-bar{position:fixed;top:0;left:0;width:100%;height:5px;z-index:99999;background:rgba(59,130,246,0.2);display:none}
@@ -266,7 +266,7 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
     </div>
   </div>
   <div class="toolbar">
-    <input type="text" id="search" placeholder="Buscar nome, empresa, email, telefone..." oninput="renderLeads()" style="flex:1;min-width:200px">
+    <input type="text" id="search-leads" placeholder="Buscar nome, empresa, email, telefone..." oninput="renderLeads()" style="flex:1;min-width:200px">
     <input type="text" id="search-notas" oninput="searchNotas()" placeholder="🔍 Buscar nas anotações..." style="background:var(--bg-input);border:0.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:13px;padding:6px 12px;width:220px;outline:none;font-family:inherit;margin-left:8px">
     <select id="filterStatus" onchange="renderLeads()">
       <option value="">Todos os status</option>
@@ -1232,7 +1232,8 @@ function sortLeads(list){
 // ─── LEADS TABLE ─────────────────────────────────────────────────────────────
 function renderLeads(){
   renderStats();
-  const q=(document.getElementById('search')||{}).value?.toLowerCase()||'';
+  const searchEl=document.getElementById('search-leads');
+  const q=searchEl?searchEl.value.toLowerCase().trim():'';
   const st=(document.getElementById('filterStatus')||{}).value||'';
   const or=(document.getElementById('filterOrigem')||{}).value||'';
   let list=leads.filter(l=>{
