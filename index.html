@@ -115,7 +115,8 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
 .empty i{font-size:32px;display:block;margin-bottom:10px;opacity:.4}
 
 /* KANBAN */
-.kanban{display:grid;grid-template-columns:repeat(6,minmax(170px,1fr));gap:10px;overflow-x:auto;padding-bottom:.5rem}
+.kanban{display:flex;flex-direction:row;gap:10px;overflow-x:auto;padding-bottom:.75rem;align-items:flex-start}
+.k-col{flex:0 0 200px;min-width:200px}
 .k-col{background:var(--bg-card);border-radius:var(--radius-lg);border:0.5px solid var(--border);padding:10px;min-height:300px}
 .k-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:8px;border-bottom:0.5px solid var(--border)}
 .k-title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
