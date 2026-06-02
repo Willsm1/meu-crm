@@ -182,9 +182,9 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
 @keyframes spin{to{transform:rotate(360deg)}}
 ::-webkit-scrollbar{width:5px;height:5px}
 /* Progress bar */
-#crm-progress-bar{position:fixed;top:0;left:0;width:100%;height:3px;z-index:9999;background:rgba(59,130,246,0.15);display:none}
-#crm-progress-bar .bar{height:3px;background:linear-gradient(90deg,#3b82f6,#60a5fa,#93c5fd);border-radius:0 2px 2px 0;transition:width .3s ease;width:0%}
-#crm-progress-bar .label{position:fixed;top:6px;left:50%;transform:translateX(-50%);font-size:11px;color:#93c5fd;background:rgba(14,22,40,0.9);padding:3px 12px;border-radius:20px;border:0.5px solid rgba(59,130,246,0.3);white-space:nowrap}
+#crm-progress-bar{position:fixed;top:0;left:0;width:100%;height:5px;z-index:99999;background:rgba(59,130,246,0.2);display:none}
+#crm-progress-bar .bar{height:5px;background:linear-gradient(90deg,#1d4ed8,#3b82f6,#60a5fa,#93c5fd);border-radius:0 3px 3px 0;transition:width .4s ease;width:0%;box-shadow:0 0 8px rgba(59,130,246,0.6)}
+#crm-progress-bar .label{position:fixed;top:10px;left:50%;transform:translateX(-50%);font-size:12px;font-weight:600;color:#e2e8f0;background:rgba(14,22,40,0.95);padding:5px 16px;border-radius:20px;border:0.5px solid rgba(59,130,246,0.4);white-space:nowrap;box-shadow:0 2px 12px rgba(0,0,0,0.4);z-index:99999}
 .exp-check{display:flex;align-items:center;gap:8px;cursor:pointer;padding:3px 0}
 .exp-check input{flex-shrink:0}
 .toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(20px);background:var(--bg-surface);border:0.5px solid var(--border-hi);color:var(--text-primary);padding:10px 20px;border-radius:var(--radius-lg);font-size:13px;z-index:9999;opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap}
