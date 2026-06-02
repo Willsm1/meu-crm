@@ -772,8 +772,12 @@ function save(){
   const normalized=leads.map(l=>({...l,id:String(l.id)}));
   const json=JSON.stringify(normalized);
   localStorage.setItem('crm_leads', json);
+  // Direct chrome.storage (extension page)
   if(typeof chrome!=='undefined'&&chrome.storage&&chrome.storage.local){
     chrome.storage.local.set({'crm_leads':json});
+  } else {
+    // Bridge (GitHub Pages)
+    window.postMessage({type:'CRM_SAVE', leads:json, calls:localStorage.getItem('crm_calls')||'[]'}, '*');
   }
   leads=normalized;
   // Debounce Google Sheets sync — wait 3s after last save to batch updates
@@ -1611,7 +1615,7 @@ function showToast(msg){
 }
 load();
 
-// Listen for changes from extension (WhatsApp sync) and auto-refresh
+// Listen for storage changes — direct chrome.storage or bridge postMessage
 if(typeof chrome !== 'undefined' && chrome.storage) {
   chrome.storage.onChanged.addListener((changes, area) => {
     if(area === 'local' && changes.crm_leads) {
@@ -1627,6 +1631,22 @@ if(typeof chrome !== 'undefined' && chrome.storage) {
     }
   });
 }
+// Bridge: listen for updates from WhatsApp extension via postMessage
+window.addEventListener('message', e => {
+  if(!e.data) return;
+  if(e.data.type === 'CRM_UPDATED' && e.data.leads) {
+    try{
+      leads = JSON.parse(e.data.leads).map(l=>({...l,id:String(l.id)}));
+      localStorage.setItem('crm_leads', e.data.leads);
+      renderAll();
+      showToast('🔄 CRM atualizado pela extensão!');
+    }catch(e2){}
+  }
+  if(e.data.type === 'CRM_BRIDGE_READY') {
+    // Bridge is ready - reload from chrome.storage
+    window.postMessage({type:'CRM_LOAD'}, '*');
+  }
+});
 </script>
 
 
