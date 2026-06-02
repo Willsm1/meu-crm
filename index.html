@@ -266,14 +266,14 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
     </div>
   </div>
   <div class="toolbar">
-    <input type="text" id="search-leads" placeholder="Buscar nome, empresa, email, telefone..." oninput="renderLeads()" style="flex:1;min-width:200px">
+    <input type="text" id="search-leads" placeholder="Buscar nome, empresa, email, telefone..." style="flex:1;min-width:200px">
     <input type="text" id="search-notas" oninput="searchNotas()" placeholder="🔍 Buscar nas anotações..." style="background:var(--bg-input);border:0.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:13px;padding:6px 12px;width:220px;outline:none;font-family:inherit;margin-left:8px">
-    <select id="filterStatus" onchange="renderLeads()">
+    <select id="filterStatus">
       <option value="">Todos os status</option>
       <option>Novo</option><option>Contato feito</option><option>Em negociação</option>
       <option>Proposta enviada</option><option>Fechado</option><option>Perdido</option>
     </select>
-    <select id="filterOrigem" onchange="renderLeads()">
+    <select id="filterOrigem">
       <option value="">Todas as origens</option>
       <option>Indicação</option><option>Instagram</option><option>LinkedIn</option>
       <option>Site</option><option>WhatsApp</option><option>Outros</option>
@@ -1231,7 +1231,6 @@ function sortLeads(list){
 
 // ─── LEADS TABLE ─────────────────────────────────────────────────────────────
 function renderLeads(){
-  renderStats();
   const searchEl=document.getElementById('search-leads');
   const q=searchEl?searchEl.value.toLowerCase().trim():'';
   const st=(document.getElementById('filterStatus')||{}).value||'';
@@ -1345,6 +1344,7 @@ function renderDashboard(){
 }
 
 function renderAll(){
+  renderStats();
   renderLeads();
   const kPage=document.getElementById('page-kanban');
   if(kPage&&kPage.classList.contains('active')) renderKanban();
@@ -1872,6 +1872,17 @@ function showToast(msg){
   _toastTimer=setTimeout(()=>t.classList.remove('show'),3000);
 }
 load();
+
+// Event listeners para busca e filtros — usar addEventListener evita perda de foco
+document.addEventListener('DOMContentLoaded', function(){});
+(function initListeners(){
+  const searchEl=document.getElementById('search-leads');
+  const statusEl=document.getElementById('filterStatus');
+  const origemEl=document.getElementById('filterOrigem');
+  if(searchEl) searchEl.addEventListener('input', renderLeads);
+  if(statusEl) statusEl.addEventListener('change', function(){ renderStats(); renderLeads(); });
+  if(origemEl) origemEl.addEventListener('change', function(){ renderStats(); renderLeads(); });
+})();
 
 // Listen for storage changes — direct chrome.storage or bridge postMessage
 if(typeof chrome !== 'undefined' && chrome.storage) {
