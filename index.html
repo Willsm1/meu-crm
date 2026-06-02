@@ -861,12 +861,20 @@ function load(){
       try{ calls=JSON.parse(r['crm_calls']||'[]'); }catch{ calls=[]; }
       if(r['crm_leads']) localStorage.setItem('crm_leads', r['crm_leads']);
       renderAll();
+      // Sync to bridge so extension has latest
+      if(r['crm_leads'] && leads.length>0){
+        window.postMessage({type:'CRM_SAVE', leads:r['crm_leads'], calls:r['crm_calls']||'[]'}, '*');
+      }
     });
   } else {
     leads = parse(localStorage.getItem('crm_leads'));
     try{ calls=JSON.parse(localStorage.getItem('crm_calls')||'[]'); }catch{ calls=[]; }
     renderAll();
-    // Auto-load from Sheets only once on first open if storage is empty
+    // Auto-sync to bridge on every load
+    const raw=localStorage.getItem('crm_leads');
+    if(raw && leads.length>0){
+      window.postMessage({type:'CRM_SAVE', leads:raw, calls:localStorage.getItem('crm_calls')||'[]'}, '*');
+    }
     if(leads.length===0&&!_loadingSheetsLock) setTimeout(()=>loadFromSheets(),1500);
   }
 }
@@ -878,13 +886,12 @@ function save(){
   leads=normalized;
   const json=JSON.stringify(normalized);
   localStorage.setItem('crm_leads', json);
-  // Direct chrome.storage (extension page)
+  // Always try direct chrome.storage first
   if(typeof chrome!=='undefined'&&chrome.storage&&chrome.storage.local){
     chrome.storage.local.set({'crm_leads':json});
-  } else {
-    // Bridge (GitHub Pages)
-    window.postMessage({type:'CRM_SAVE', leads:json, calls:localStorage.getItem('crm_calls')||'[]'}, '*');
   }
+  // ALSO always send via bridge (covers GitHub Pages + extension page)
+  window.postMessage({type:'CRM_SAVE', leads:json, calls:localStorage.getItem('crm_calls')||'[]'}, '*');
   leads=normalized;
   // Debounce Google Sheets sync — wait 3s after last save to batch updates
   clearTimeout(_sheetsSyncTimer);
