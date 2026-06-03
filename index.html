@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Meu CRM</title>
+<title>Taurus Magnun CRM</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
@@ -200,7 +200,7 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
 <!-- NAV -->
 <div id="crm-progress-bar"><div class="bar" id="crm-pb-fill"></div><div class="label" id="crm-pb-label"></div></div>
 <nav class="nav">
-  <div class="nav-brand"><i class="ti ti-address-book"></i> Meu CRM</div>
+  <div class="nav-brand"><i class="ti ti-address-book"></i> Taurus Magnun CRM</div>
   <button class="nav-tab active" onclick="showPage('leads',this)"><i class="ti ti-list"></i> Leads</button>
   <button class="nav-tab" onclick="showPage('kanban',this)"><i class="ti ti-layout-kanban"></i> Kanban</button>
   <button class="nav-tab" onclick="showPage('dashboard',this)"><i class="ti ti-chart-bar"></i> Dashboard</button>
@@ -973,6 +973,8 @@ function syncToSheets(showFeedback=true){
     _lastSyncTime=new Date();
     if(d.ok){
       updateProgress('✅ '+d.total+' leads sincronizados!', 100);
+      // Envia as ligações para a aba "Ligações" (acumula, não apaga)
+      syncCallsToSheets();
       hideProgress();
       if(showFeedback){
         showToast('✅ '+d.total+' leads salvos no Google Sheets!');
@@ -984,6 +986,19 @@ function syncToSheets(showFeedback=true){
     }
   })
   .catch(e=>{ clearInterval(anim); hideProgress(); if(showFeedback) showToast('⚠ Sheets offline: '+e.message); });
+}
+
+// Envia o histórico de ligações para a aba "Ligações" do Sheets (acumula)
+function syncCallsToSheets(){
+  if(!SHEETS_URL) return;
+  if(!calls || !calls.length) return;
+  fetch(SHEETS_URL, {
+    method:'POST',
+    body: JSON.stringify({action:'calls', calls:calls}),
+  })
+  .then(r=>r.json())
+  .then(d=>{ if(d.ok && d.added>0) showToast('📞 '+d.added+' ligações novas no Sheets'); })
+  .catch(()=>{});
 }
 
 let _loadingSheetsLock=false;
