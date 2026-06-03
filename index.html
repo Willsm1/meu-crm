@@ -865,7 +865,7 @@ function load(){
       renderAll();
       // Sync to bridge so extension has latest
       if(r['crm_leads'] && leads.length>0){
-        window.postMessage({type:'CRM_SAVE', leads:r['crm_leads'], calls:r['crm_calls']||'[]'}, '*');
+        window.postMessage({type:'CRM_SAVE', leads:r['crm_leads'], calls:null}, '*');
       }
     });
   } else {
@@ -875,7 +875,7 @@ function load(){
     // Auto-sync to bridge — envia com retry (cobre caso do bridge ainda não estar pronto)
     const raw=localStorage.getItem('crm_leads');
     if(raw && leads.length>0){
-      const sendToBridge=()=>window.postMessage({type:'CRM_SAVE', leads:raw, calls:localStorage.getItem('crm_calls')||'[]'}, '*');
+      const sendToBridge=()=>window.postMessage({type:'CRM_SAVE', leads:raw, calls:null}, '*');
       sendToBridge();
       setTimeout(sendToBridge, 1000);
       setTimeout(sendToBridge, 3000);
@@ -896,7 +896,7 @@ function save(){
     chrome.storage.local.set({'crm_leads':json});
   }
   // ALSO always send via bridge (covers GitHub Pages + extension page)
-  window.postMessage({type:'CRM_SAVE', leads:json, calls:localStorage.getItem('crm_calls')||'[]'}, '*');
+  window.postMessage({type:'CRM_SAVE', leads:json, calls:null}, '*');
   leads=normalized;
   // Debounce Google Sheets sync — wait 3s after last save to batch updates
   clearTimeout(_sheetsSyncTimer);
@@ -1898,6 +1898,10 @@ window.addEventListener('message', e => {
     try{
       leads = JSON.parse(e.data.leads).map(l=>({...l,id:String(l.id)}));
       localStorage.setItem('crm_leads', e.data.leads);
+      // Também atualiza as ligações (registro de chamadas) se vierem junto
+      if(e.data.calls){
+        try{ calls=JSON.parse(e.data.calls); localStorage.setItem('crm_calls', e.data.calls); }catch{}
+      }
       renderAll();
       showToast('🔄 CRM atualizado pela extensão!');
     }catch(e2){}
@@ -1906,7 +1910,7 @@ window.addEventListener('message', e => {
     // Bridge pronto — ENVIA os leads do CRM para a extensão (chrome.storage)
     const raw=localStorage.getItem('crm_leads');
     if(raw && leads.length>0){
-      window.postMessage({type:'CRM_SAVE', leads:raw, calls:localStorage.getItem('crm_calls')||'[]'}, '*');
+      window.postMessage({type:'CRM_SAVE', leads:raw, calls:null}, '*');
       showToast('🔗 '+leads.length+' leads enviados para a extensão');
     }
   }
