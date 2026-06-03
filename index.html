@@ -797,7 +797,7 @@ function searchNotas(){
   const words=q.split(/\s+/).filter(Boolean);
   
   const matched=leads.filter(l=>{
-    const text=(l.notas||'').toLowerCase();
+    const text=String(l.notas||'').toLowerCase();
     // All words must appear somewhere in the notes
     return words.every(w=>text.includes(w));
   });
@@ -872,10 +872,13 @@ function load(){
     leads = parse(localStorage.getItem('crm_leads'));
     try{ calls=JSON.parse(localStorage.getItem('crm_calls')||'[]'); }catch{ calls=[]; }
     renderAll();
-    // Auto-sync to bridge on every load
+    // Auto-sync to bridge — envia com retry (cobre caso do bridge ainda não estar pronto)
     const raw=localStorage.getItem('crm_leads');
     if(raw && leads.length>0){
-      window.postMessage({type:'CRM_SAVE', leads:raw, calls:localStorage.getItem('crm_calls')||'[]'}, '*');
+      const sendToBridge=()=>window.postMessage({type:'CRM_SAVE', leads:raw, calls:localStorage.getItem('crm_calls')||'[]'}, '*');
+      sendToBridge();
+      setTimeout(sendToBridge, 1000);
+      setTimeout(sendToBridge, 3000);
     }
     if(leads.length===0&&!_loadingSheetsLock) setTimeout(()=>loadFromSheets(),1500);
   }
@@ -1235,7 +1238,7 @@ function renderLeads(){
   const st=(document.getElementById('filterStatus')||{}).value||'';
   const or=(document.getElementById('filterOrigem')||{}).value||'';
   let list=leads.filter(l=>{
-    const mq=!q||[l.nome,l.empresa,l.email,l.telefone].some(f=>(f||'').toLowerCase().includes(q));
+    const mq=!q||[l.nome,l.empresa,l.email,l.telefone].some(f=>String(f||'').toLowerCase().includes(q));
     return mq&&(!st||l.status===st)&&(!or||l.origem===or);
   });
   list=sortLeads(list);
@@ -1722,7 +1725,7 @@ function tryExtractName(lead){
 }
 function normalizeStatus(s){
   if(!s) return 'Novo';
-  const sl=s.toLowerCase();
+  const sl=String(s).toLowerCase();
   if(/novo|new|fresh/.test(sl)) return 'Novo';
   if(/contato|contact|ligou/.test(sl)) return 'Contato feito';
   if(/negoc|negotiat/.test(sl)) return 'Em negociação';
@@ -1900,8 +1903,15 @@ window.addEventListener('message', e => {
     }catch(e2){}
   }
   if(e.data.type === 'CRM_BRIDGE_READY') {
-    // Bridge is ready - reload from chrome.storage
-    window.postMessage({type:'CRM_LOAD'}, '*');
+    // Bridge pronto — ENVIA os leads do CRM para a extensão (chrome.storage)
+    const raw=localStorage.getItem('crm_leads');
+    if(raw && leads.length>0){
+      window.postMessage({type:'CRM_SAVE', leads:raw, calls:localStorage.getItem('crm_calls')||'[]'}, '*');
+      showToast('🔗 '+leads.length+' leads enviados para a extensão');
+    }
+  }
+  if(e.data.type === 'CRM_SAVED') {
+    // Confirmação de que o bridge gravou no chrome.storage
   }
 });
 </script>
