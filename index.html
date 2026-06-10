@@ -270,8 +270,10 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
     <input type="text" id="search-notas" oninput="searchNotas()" placeholder="🔍 Buscar nas anotações..." style="background:var(--bg-input);border:0.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:13px;padding:6px 12px;width:220px;outline:none;font-family:inherit;margin-left:8px">
     <select id="filterStatus" onchange="renderLeads()">
       <option value="">Todos os status</option>
-      <option>Novo</option><option>Contato feito</option><option>Em negociação</option>
-      <option>Proposta enviada</option><option>Fechado</option><option>Perdido</option>
+      <option>Novo</option><option>Contato feito</option><option>Interações</option>
+      <option>Em negociação</option><option>Proposta enviada</option><option>Fechado</option>
+      <option>Perdido</option><option>Gold ⭐</option><option>Manter Atualizado</option>
+      <option>Pronto</option><option>Moradia</option><option>Crítico</option>
     </select>
     <select id="filterOrigem" onchange="renderLeads()">
       <option value="">Todas as origens</option>
@@ -402,9 +404,10 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
     <div class="form-grid">
       <div class="form-row"><label>Status</label>
         <select id="f-status">
-          <option>Novo</option><option>Contato feito</option><option>Em negociação</option>
-          <option>Proposta enviada</option><option>Fechado</option><option>Perdido</option>
-        <option>Gold ⭐</option>
+          <option>Novo</option><option>Contato feito</option><option>Interações</option>
+          <option>Em negociação</option><option>Proposta enviada</option><option>Fechado</option>
+          <option>Perdido</option><option>Gold ⭐</option><option>Manter Atualizado</option>
+          <option>Pronto</option><option>Moradia</option><option>Crítico</option>
         </select>
       </div>
       <div class="form-row"><label>Valor estimado (R$)</label><input id="f-valor" type="number" min="0" placeholder="0"></div>
@@ -1289,7 +1292,7 @@ function renderLeads(){
 // ─── KANBAN ──────────────────────────────────────────────────────────────────
 function renderKanban(){
   const el=document.getElementById('kanban');
-  const colors={'Novo':'#60a5fa','Contato feito':'#7dd3fc','Em negociação':'#a5b4fc','Proposta enviada':'#d8b4fe','Fechado':'#86efac','Perdido':'#fca5a5'};
+  const colors={'Novo':'#60a5fa','Contato feito':'#7dd3fc','Interações':'#22d3ee','Em negociação':'#a5b4fc','Proposta enviada':'#d8b4fe','Fechado':'#86efac','Perdido':'#fca5a5','Gold ⭐':'#fde047','Manter Atualizado':'#a5b4fc','Pronto':'#6ee7b7','Moradia':'#fcd34d','Crítico':'#fca5a5'};
   el.innerHTML=STATUSES.map(s=>{
     const cols=leads.filter(l=>l.status===s);
     const cards=cols.map(l=>`
@@ -1469,10 +1472,19 @@ function deleteByIdx(i){
 // ─── EXPORT ──────────────────────────────────────────────────────────────────
 function exportCSV(){
   if(!leads.length){alert('Nenhum lead.'); return;}
+  // Se há leads selecionados, exporta SÓ os selecionados; senão, exporta todos
+  let alvo=leads;
+  let nomeArquivo='leads_completo.csv';
+  if(selected && selected.size>0){
+    alvo=leads.filter(l=>selected.has(String(l.id)));
+    nomeArquivo='leads_selecionados.csv';
+  }
+  if(!alvo.length){alert('Nenhum lead selecionado.'); return;}
   const keys=['nome','empresa','email','telefone','status','valor','data','origem','notas'];
   const headers=['Nome','Empresa','Email','Telefone','Status','Valor','Data','Origem','Anotações'];
-  const rows=leads.map(l=>{ const r={}; keys.forEach((k,i)=>r[headers[i]]=(l[k]||'').toString()); return r; });
-  downloadBlob('leads_completo.csv', buildCSVContent(rows,headers));
+  const rows=alvo.map(l=>{ const r={}; keys.forEach((k,i)=>r[headers[i]]=(l[k]||'').toString()); return r; });
+  downloadBlob(nomeArquivo, buildCSVContent(rows,headers));
+  showToast('✓ '+alvo.length+' lead(s) exportado(s)!');
 }
 
 // ─── IMPORT: FILE HANDLING ────────────────────────────────────────────────────
