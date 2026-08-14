@@ -206,6 +206,7 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
   <button class="nav-tab" onclick="showPage('dashboard',this)"><i class="ti ti-chart-bar"></i> Dashboard</button>
   <button class="nav-tab" onclick="showPage('import',this)"><i class="ti ti-file-import"></i> Importar</button>
   <button class="nav-tab" onclick="showPage('exportar',this)"><i class="ti ti-file-export"></i> Exportar</button>
+  <button class="nav-tab" onclick="showPage('retomar',this)"><i class="ti ti-rotate-clockwise"></i> Retomar <span id="retomar-badge" style="display:none;background:rgba(252,211,77,.2);color:#fcd34d;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700"></span></button>
   <button class="nav-tab" onclick="showPage('relatorio',this)"><i class="ti ti-chart-line"></i> Relatório</button>
   <div class="nav-spacer"></div>
   <button class="nav-btn" id="refresh-btn" onclick="refreshCRM()" title="Atualizar dados do CRM"><i class="ti ti-refresh"></i> Atualizar</button>
@@ -763,6 +764,139 @@ function renderRelatorio(){
   </tr>`).join('');
 }
 
+// ─── RETOMAR ─────────────────────────────────────────────────────────────────
+// Lista quem parou, separando "ele respondeu e eu não voltei" (bola comigo)
+// de "eu falei e ele não respondeu" (aguardando). Alimentado pelos campos
+// ult_meu / ult_dele, que a extensão carimba ao abrir a conversa.
+const RET_IGNORAR=['Fechado','Perdido'];
+
+function retDias(iso){
+  if(!iso) return null;
+  const p=String(iso).split('-');
+  if(p.length!==3) return null;
+  const a=Date.UTC(+p[0],+p[1]-1,+p[2]);
+  if(isNaN(a)) return null;
+  const n=new Date();
+  const b=Date.UTC(n.getFullYear(),n.getMonth(),n.getDate());
+  return Math.round((b-a)/86400000);
+}
+function retRotulo(iso){
+  const n=retDias(iso);
+  if(n===null) return '—';
+  if(n<=0) return 'hoje';
+  if(n===1) return 'ontem';
+  return n+' dias';
+}
+function retCor(n){
+  if(n===null) return 'var(--text-muted)';
+  if(n>=30) return '#fca5a5';
+  if(n>=15) return '#fcd34d';
+  if(n>=7)  return '#93c5fd';
+  return '#86efac';
+}
+
+// Classifica um lead: bola | aguardando | semdados
+function retClassificar(l){
+  const m=l.ult_meu||'', d=l.ult_dele||'';
+  if(!m&&!d) return {grupo:'semdados',parado:null};
+  const nm=retDias(m), nd=retDias(d);
+  const parado=Math.min(nm===null?99999:nm, nd===null?99999:nd);
+  if(d>m) return {grupo:'bola',parado};
+  return {grupo:'aguardando',parado};
+}
+
+function retDados(){
+  const minDias=parseInt(document.getElementById('ret-dias').value,10)||0;
+  const fStatus=document.getElementById('ret-status').value;
+  const out={bola:[],aguardando:[],semdados:[]};
+  leads.forEach(l=>{
+    if(RET_IGNORAR.includes(l.status)) return;
+    if(fStatus&&l.status!==fStatus) return;
+    const c=retClassificar(l);
+    if(c.grupo==='semdados'){ out.semdados.push({l,parado:null}); return; }
+    if(c.parado<minDias) return;
+    out[c.grupo].push({l,parado:c.parado});
+  });
+  out.bola.sort((a,b)=>b.parado-a.parado);
+  out.aguardando.sort((a,b)=>b.parado-a.parado);
+  out.semdados.sort((a,b)=>(a.l.nome||'').localeCompare(b.l.nome||''));
+  return out;
+}
+
+function retLinha(o){
+  const l=o.l, tel=cleanPhone(l.telefone);
+  const wa=tel?`<a href="https://wa.me/${tel}" target="_blank" rel="noopener" class="btn" style="padding:3px 9px;font-size:11px;text-decoration:none;display:inline-flex;align-items:center;gap:4px"><i class="ti ti-brand-whatsapp"></i> Abrir</a>`:'—';
+  return `<tr>
+    <td><b>${(l.nome||'—')}</b></td>
+    <td style="color:var(--text-muted);font-size:12px">${tel||'—'}</td>
+    <td><span class="badge ${STATUS_CLASS[l.status]||'b-novo'}">${l.status||'Novo'}</span></td>
+    <td style="font-size:12px">${l.perfil||'—'}</td>
+    <td style="font-size:12px">${l.regiao||'—'}</td>
+    <td style="font-size:12px">${retRotulo(l.ult_meu)}</td>
+    <td style="font-size:12px">${retRotulo(l.ult_dele)}</td>
+    <td style="font-weight:700;color:${retCor(o.parado)}">${o.parado===null?'—':o.parado+'d'}</td>
+    <td>${wa}</td>
+  </tr>`;
+}
+
+function retTabela(titulo,sub,cor,lista,vazio){
+  if(!lista.length) return `<div class="section-title" style="font-size:14px;margin-bottom:.5rem;color:${cor}">${titulo}</div>
+    <div style="color:var(--text-muted);font-size:13px;padding:14px;background:var(--bg-card);border:0.5px solid var(--border);border-radius:var(--radius)">${vazio}</div>`;
+  return `<div class="section-title" style="font-size:14px;margin-bottom:.2rem;color:${cor}">${titulo} <span style="color:var(--text-muted);font-weight:400">(${lista.length})</span></div>
+    <div style="color:var(--text-muted);font-size:12px;margin-bottom:.7rem">${sub}</div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Nome</th><th>Telefone</th><th>Status</th><th>Perfil</th><th>Região</th><th>Eu falei</th><th>Ele falou</th><th>Parado</th><th></th></tr></thead>
+      <tbody>${lista.map(retLinha).join('')}</tbody>
+    </table></div>`;
+}
+
+function renderRetomar(){
+  // Preenche o filtro de status uma única vez
+  const sel=document.getElementById('ret-status');
+  if(sel&&sel.options.length<=1){
+    STATUSES.filter(s=>!RET_IGNORAR.includes(s)).forEach(s=>{
+      const o=document.createElement('option'); o.value=s; o.textContent=s; sel.appendChild(o);
+    });
+  }
+  const d=retDados();
+
+  document.getElementById('ret-stats').innerHTML=`
+    <div class="stat-card"><div class="stat-label">A bola está com você</div><div class="stat-value" style="color:#fcd34d">${d.bola.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Aguardando resposta</div><div class="stat-value" style="color:#93c5fd">${d.aguardando.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Sem histórico lido</div><div class="stat-value" style="color:var(--text-muted)">${d.semdados.length}</div></div>`;
+
+  document.getElementById('ret-bola').innerHTML=retTabela(
+    '🎯 A bola está com você', 'Ele respondeu e você ainda não voltou. Prioridade máxima.', '#fcd34d',
+    d.bola, 'Ninguém aqui — nenhuma resposta sua está pendente neste filtro.');
+
+  document.getElementById('ret-aguardando').innerHTML=retTabela(
+    '⏳ Aguardando resposta', 'Você falou por último e ele não respondeu. Vale um follow-up.', '#93c5fd',
+    d.aguardando, 'Ninguém aqui neste filtro.');
+
+  document.getElementById('ret-semdados').innerHTML=retTabela(
+    '📭 Sem histórico lido', 'Ainda não abri estas conversas no WhatsApp com a extensão ligada. Abra a conversa uma vez e as datas aparecem.', 'var(--text-muted)',
+    d.semdados.slice(0,50), 'Todos os leads já têm histórico lido.')
+    + (d.semdados.length>50?`<div style="color:var(--text-muted);font-size:12px;margin-top:8px">…e mais ${d.semdados.length-50} leads sem histórico.</div>`:'');
+
+  // Badge na aba
+  const b=document.getElementById('retomar-badge');
+  if(b){
+    if(d.bola.length){ b.textContent=d.bola.length; b.style.display='inline-block'; }
+    else b.style.display='none';
+  }
+}
+
+function exportarRetomar(){
+  const d=retDados();
+  const rows=[['Grupo','Nome','Telefone','Status','Perfil','Regiao','Eu_falei','Ele_falou','Dias_parado']];
+  const add=(g,arr)=>arr.forEach(o=>rows.push([g,o.l.nome||'',cleanPhone(o.l.telefone),o.l.status||'',
+    o.l.perfil||'',o.l.regiao||'',o.l.ult_meu||'',o.l.ult_dele||'',o.parado===null?'':o.parado]));
+  add('Bola comigo',d.bola); add('Aguardando',d.aguardando); add('Sem historico',d.semdados);
+  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  downloadBlob('\ufeff'+csv,'retomar_contato.csv','text/csv;charset=utf-8');
+  showToast(`✅ ${rows.length-1} leads exportados`);
+}
+
 function exportarRelatorio(){
   const {start,end,label}=getRelPeriodo();
   const filtered=leads.filter(l=>{ const d=l.data||''; return d>=start&&d<=end; });
@@ -838,6 +972,16 @@ function searchNotas(){
   }).join('');
   tbody.querySelectorAll('.row-cb').forEach(cb=>{
     cb.addEventListener('change',()=>toggleRow(cb.dataset.id,cb));
+  });
+  // FIX: estes botões usam data-action (não onclick inline como o renderLeads).
+  // Sem este listener o clique não fazia nada — o ✏️ e a 🗑️ ficavam mudos
+  // quando a lista vinha da busca em anotações.
+  tbody.querySelectorAll('[data-action]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const acao=btn.dataset.action;
+      if(acao==='openModal') openModal(btn.dataset.id);
+      else if(acao==='deleteByIdx') deleteByIdx(parseInt(btn.dataset.idx,10));
+    });
   });
 }
 
@@ -933,34 +1077,44 @@ function syncToSheets(showFeedback=true){
       });
     }
 
-    // Merge: local leads override sheets (local is source of truth)
-    // New leads in sheets that don't exist locally → add to local
+    // ─── MODO ESPELHO ─────────────────────────────────────────────────────
+    // A planilha reflete o CRM. Linhas que existem só na planilha NÃO são mais
+    // trazidas de volta — antes elas voltavam a cada sync e nada morria nunca
+    // (leads apagados renasciam, contatos antigos se acumulavam).
+    // O CRM é a fonte da verdade.
     const localPhones=new Set(leads.map(l=>String(l.telefone||'').replace(/\D/g,'')));
-    const sheetsOnlyLeads=[];
-    sheetsMap.forEach((l,key)=>{
+    let somenteNaPlanilha=0;
+    sheetsMap.forEach(l=>{
       const phone=String(l.telefone||'').replace(/\D/g,'');
-      if(phone.length>=8 && !localPhones.has(phone)){
-        sheetsOnlyLeads.push({
-          id:String(l.id||Date.now()),
-          nome:l.nome||'',telefone:l.telefone||'',
-          status:l.status||'Novo',notas:l.anotações||l.notas||'',
-          empresa:l.empresa||'',email:l.email||'',
-          valor:l.valor||'',data:l.data||'',origem:l.origem||''
-        });
-      }
+      if(phone.length>=8 && !localPhones.has(phone)) somenteNaPlanilha++;
     });
 
-    // Final merged list: all local leads + sheets-only leads
-    const merged=[...leads, ...sheetsOnlyLeads];
-    const deduped=deduplicateLeads(merged);
-
-    if(sheetsOnlyLeads.length>0){
-      leads=deduped;
-      const json=JSON.stringify(leads);
-      localStorage.setItem('crm_leads',json);
-      if(typeof chrome!=='undefined'&&chrome.storage&&chrome.storage.local){
-        chrome.storage.local.set({'crm_leads':json});
+    // ─── TRAVA DE SEGURANÇA ───────────────────────────────────────────────
+    // Como agora a planilha é sobrescrita, um CRM vazio ou muito menor que a
+    // planilha apagaria o backup. Nesses casos a sincronização é cancelada.
+    const naPlanilha=sheetsMap.size;
+    if(leads.length===0 && naPlanilha>0){
+      clearInterval(anim); hideProgress();
+      showToast('🛑 Cancelado: o CRM está vazio e a planilha tem '+naPlanilha+' leads. Nada foi alterado.');
+      return Promise.reject(new Error('_trava_vazio'));
+    }
+    if(naPlanilha>0 && leads.length < naPlanilha*0.5){
+      clearInterval(anim); hideProgress();
+      const ok = showFeedback && confirm(
+        'ATENÇÃO\n\nO CRM tem '+leads.length+' leads e a planilha tem '+naPlanilha+'.\n'+
+        'Continuar vai deixar a planilha com '+leads.length+' — os outros serão apagados.\n\n'+
+        'Isso é o esperado se você acabou de limpar a base.\n'+
+        'Se não foi você, cancele: pode ser perda de dados.\n\nContinuar mesmo assim?');
+      if(!ok){
+        showToast('🛑 Sincronização cancelada. Nada foi alterado na planilha.');
+        return Promise.reject(new Error('_trava_reducao'));
       }
+      showProgress('☁ Sincronizando '+leads.length+' leads...', 60);
+    }
+
+    const deduped=deduplicateLeads(leads.map(l=>({...l,id:String(l.id)})));
+    if(somenteNaPlanilha>0 && showFeedback){
+      setTimeout(()=>showToast('ℹ '+somenteNaPlanilha+' linhas que só existiam na planilha foram removidas (espelho do CRM)'), 1800);
     }
 
     updateProgress('☁ Salvando no Sheets...', 65);
@@ -988,7 +1142,10 @@ function syncToSheets(showFeedback=true){
       if(showFeedback) showToast('⚠ Erro no Sheets: '+(d.error||''));
     }
   })
-  .catch(e=>{ clearInterval(anim); hideProgress(); if(showFeedback) showToast('⚠ Sheets offline: '+e.message); });
+  .catch(e=>{ clearInterval(anim); hideProgress();
+    // As travas de segurança já avisaram o usuário — não mostrar "Sheets offline"
+    if(e && String(e.message||'').startsWith('_trava_')) return;
+    if(showFeedback) showToast('⚠ Sheets offline: '+e.message); });
 }
 
 // Envia o histórico de ligações para a aba "Ligações" do Sheets (acumula)
@@ -1050,7 +1207,10 @@ function loadFromSheets(){
         nome:l.nome||'',empresa:l.empresa||'',email:l.email||'',
         telefone:l.telefone||'',status:l.status||'Novo',
         valor:l.valor||'',data:l.data||'',origem:l.origem||'',
-        notas:l.anotações||l.notas||''
+        notas:l.anotações||l.notas||'',
+        // CAMPOS EXTRAS — preservados para não serem apagados no round-trip
+        ult_meu:l.ult_meu||'',ult_dele:l.ult_dele||'',
+        perfil:l.perfil||'',regiao:l.regiao||''
       }));
       leads=deduplicateLeads(loaded);
       const json=JSON.stringify(leads);
@@ -1125,6 +1285,7 @@ function showPage(name,btn){
   if(name==='dashboard') renderDashboard();
   if(name==='exportar') refreshExportPreview();
   if(name==='relatorio') renderRelatorio();
+  if(name==='retomar') renderRetomar();
 }
 
 // ─── STATS ───────────────────────────────────────────────────────────────────
@@ -2076,6 +2237,33 @@ window.addEventListener('message', e => {
       <button class="btn" id="confirm-yes" style="background:rgba(239,68,68,.2);border-color:rgba(239,68,68,.5);color:#fca5a5">Excluir</button>
     </div>
   </div>
+</div>
+
+<div class="page" id="page-retomar">
+<div class="container">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.2rem;flex-wrap:wrap;gap:10px">
+    <div class="section-title" style="margin-bottom:0"><i class="ti ti-rotate-clockwise"></i> Retomar contato</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select id="ret-dias" onchange="renderRetomar()" style="height:34px">
+        <option value="0">Todos</option>
+        <option value="3">Parados 3+ dias</option>
+        <option value="7" selected>Parados 7+ dias</option>
+        <option value="15">Parados 15+ dias</option>
+        <option value="30">Parados 30+ dias</option>
+      </select>
+      <select id="ret-status" onchange="renderRetomar()" style="height:34px">
+        <option value="">Todos os status ativos</option>
+      </select>
+      <button class="btn btn-primary" onclick="exportarRetomar()"><i class="ti ti-download"></i> Baixar CSV</button>
+    </div>
+  </div>
+
+  <div class="stats" id="ret-stats" style="margin-bottom:1.4rem"></div>
+
+  <div id="ret-bola"></div>
+  <div id="ret-aguardando" style="margin-top:1.6rem"></div>
+  <div id="ret-semdados" style="margin-top:1.6rem"></div>
+</div>
 </div>
 
 </body>
