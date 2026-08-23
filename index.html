@@ -206,6 +206,7 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
   <button class="nav-tab" onclick="showPage('dashboard',this)"><i class="ti ti-chart-bar"></i> Dashboard</button>
   <button class="nav-tab" onclick="showPage('import',this)"><i class="ti ti-file-import"></i> Importar</button>
   <button class="nav-tab" onclick="showPage('exportar',this)"><i class="ti ti-file-export"></i> Exportar</button>
+  <button class="nav-tab" onclick="showPage('quentes',this)"><i class="ti ti-flame"></i> Quentes <span id="quentes-badge" style="display:none;background:rgba(252,165,165,.2);color:#fca5a5;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700"></span></button>
   <button class="nav-tab" onclick="showPage('retomar',this)"><i class="ti ti-rotate-clockwise"></i> Retomar <span id="retomar-badge" style="display:none;background:rgba(252,211,77,.2);color:#fcd34d;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700"></span></button>
   <button class="nav-tab" onclick="showPage('relatorio',this)"><i class="ti ti-chart-line"></i> Relatório</button>
   <div class="nav-spacer"></div>
@@ -902,6 +903,407 @@ function renderRetomar(){
   }
 }
 
+// Cores de cada status — fonte única, usada pelo Kanban e pela aba Quentes.
+const STATUS_COLOR={'Novo':'#60a5fa','Contato feito':'#7dd3fc','Interações':'#22d3ee','Em negociação':'#a5b4fc','Proposta enviada':'#d8b4fe','Fechado':'#86efac','Perdido':'#fca5a5','Gold ⭐':'#fde047','Manter Atualizado':'#a5b4fc','Pronto':'#6ee7b7','Moradia':'#fcd34d','Crítico':'#fca5a5'};
+
+// ─── NEGOCIAÇÕES QUENTES ─────────────────────────────────────────────────────
+// Só negociações em aberto. Quem vai para Fechado, Perdido ou volta para o
+// começo do funil sai do painel automaticamente.
+const Q_STATUS=['Interações','Em negociação','Proposta enviada','Gold ⭐','Crítico'];
+const Q_PESO={'Proposta enviada':40,'Em negociação':30,'Gold ⭐':25,'Crítico':20,'Interações':10};
+let _qEdit=null, _qAberto=null, _qNotas=null, _qValor=null, _qFiltroAberto=false;
+let _qF={nome:'',regiao:'',perfil:'',ordem:'calor'};
+// Quantos cards desenhar de uma vez. Com a base cheia a aba pode ter 500+
+// negociações em aberto — desenhar tudo trava a tela e ninguém rola até o fim.
+const Q_LOTE=25;
+let _qMostrar=Q_LOTE;
+const _qAtivos=()=>[_qF.nome,_qF.regiao,_qF.perfil].filter(Boolean).length;
+
+function qDias(iso){
+  if(!iso) return null;
+  const p=String(iso).split('-');
+  if(p.length!==3) return null;
+  const a=Date.UTC(+p[0],+p[1]-1,+p[2]);
+  if(isNaN(a)) return null;
+  const n=new Date();
+  return Math.round((Date.UTC(n.getFullYear(),n.getMonth(),n.getDate())-a)/86400000);
+}
+function qCalor(l){
+  let p=Q_PESO[l.status]||0, por=[];
+  if(p) por.push(l.status+' +'+p);
+  const nm=qDias(l.ult_meu), nd=qDias(l.ult_dele);
+  if(nd!==null && nm!==null && String(l.ult_dele)>String(l.ult_meu)){ p+=25; por.push('respondeu por último +25'); }
+  const parado=Math.min(nm===null?999:nm, nd===null?999:nd);
+  if(parado<=3){ p+=20; por.push('ativo há '+parado+'d +20'); }
+  else if(parado<=7){ p+=10; por.push('ativo há '+parado+'d +10'); }
+  else if(parado>30 && parado<999){ p-=15; por.push('parado '+parado+'d −15'); }
+  const n=String(l.notas||'').split('\n').filter(x=>x.trim()).length;
+  if(n>=3){ p+=15; por.push(n+' anotações +15'); }
+  else if(n===2){ p+=8; por.push('2 anotações +8'); }
+  return {pct:Math.max(0,Math.min(100,Math.round(p))), por:por, parado:parado};
+}
+const qCor=p=>p>=75?'#fca5a5':(p>=50?'#fcd34d':(p>=30?'#93c5fd':'#4b5e78'));
+function qRgba(hex,a){
+  const h=String(hex).replace('#','');
+  return 'rgba('+parseInt(h.slice(0,2),16)+','+parseInt(h.slice(2,4),16)+','+parseInt(h.slice(4,6),16)+','+a+')';
+}
+function qAviso(html,cor){
+  const a=document.getElementById('q-aviso');
+  if(a) a.innerHTML='<span style="color:'+cor+'">'+html+'</span>';
+}
+
+function qPrompt(l){
+  const tel=cleanPhone(l.telefone);
+  return 'Sou corretor de imóveis. Analise esta negociação e me diga qual o melhor próximo passo.\n\n'+
+    'CLIENTE: '+(l.nome||'(sem nome)')+'\n'+
+    'PERFIL: '+(l.perfil||'não informado')+'\n'+
+    'REGIÃO DE INTERESSE: '+(l.regiao||'não informada')+'\n'+
+    'ETAPA: '+(l.status||'')+'\n'+
+    (l.valor?('VALOR EM JOGO: '+l.valor+'\n'):'')+
+    (l.origem?('ORIGEM: '+l.origem+'\n'):'')+
+    'ÚLTIMA VEZ QUE FALEI: '+(qDias(l.ult_meu)===null?'não registrado':('há '+qDias(l.ult_meu)+' dias'))+'\n'+
+    'ÚLTIMA VEZ QUE ELE FALOU: '+(qDias(l.ult_dele)===null?'não registrado':('há '+qDias(l.ult_dele)+' dias'))+'\n\n'+
+    'HISTÓRICO DAS ANOTAÇÕES:\n'+(l.notas||'(sem anotações)')+'\n\n'+
+    'Me responda em 3 partes, de forma curta e direta:\n'+
+    '1. Em que pé está a negociação e qual o principal risco de perder\n'+
+    '2. Qual deve ser o próximo passo\n'+
+    '3. Uma sugestão de mensagem para eu enviar agora no WhatsApp';
+}
+
+function qChip(id,campo,texto,cor,vazio){
+  const c=cor||'#4b5e78';
+  return '<button class="q-ch" data-id="'+id+'" data-c="'+campo+'" style="background:'+(vazio?'transparent':qRgba(c,0.12))+
+    ';border:0.5px '+(vazio?'dashed rgba(59,130,246,0.3)':'solid '+qRgba(c,0.35))+';color:'+(vazio?'#4b5e78':c)+
+    ';font-size:10px;padding:2px 9px;border-radius:20px;white-space:nowrap;cursor:pointer;font-family:inherit">'+
+    escHtml(texto)+' <span style="opacity:.55">▾</span></button>';
+}
+function qSeletor(l){
+  if(!_qEdit || String(_qEdit.id)!==String(l.id)) return '';
+  const campo=_qEdit.campo;
+  let titulo='', opcoes='';
+  const btn=(campo,valor,rotulo,cor,on,extra)=>
+    '<button class="q-op" data-id="'+l.id+'" data-c="'+campo+'" data-v="'+escHtml(valor).replace(/"/g,'&quot;')+'" style="background:'+
+    (on?qRgba(cor,0.18):'transparent')+';border:0.5px solid '+qRgba(cor,on?0.5:0.22)+';color:'+(on?cor:'#94a3b8')+
+    ';font-size:10px;padding:3px 9px;border-radius:20px;cursor:pointer;font-family:inherit">'+escHtml(rotulo)+(extra||'')+'</button>';
+  const limpar=(campo)=>'<button class="q-op" data-id="'+l.id+'" data-c="'+campo+'" data-v="" style="background:transparent;'+
+    'border:0.5px solid rgba(252,165,165,0.3);color:#fca5a5;font-size:10px;padding:3px 11px;border-radius:20px;cursor:pointer;font-family:inherit">✕ limpar</button>';
+
+  if(campo==='status'){
+    titulo='ALTERAR STATUS';
+    opcoes=STATUSES.map(st=>{
+      const cor=(typeof STATUS_COLOR!=='undefined'&&STATUS_COLOR[st])?STATUS_COLOR[st]:'#93c5fd';
+      const fora=Q_STATUS.indexOf(st)<0;
+      return btn('status',st,st,cor,st===l.status,fora?'<span style="opacity:.5"> ↗</span>':'');
+    }).join('');
+  } else if(campo==='perfil'){
+    titulo='PERFIL DO CLIENTE';
+    opcoes=['Moradia','Investimento'].map(v=>btn('perfil',v,v,'#86efac',v===(l.perfil||''))).join('')+(l.perfil?limpar('perfil'):'');
+  } else {
+    titulo='REGIÃO DE INTERESSE';
+    const rs=regioesDisponiveis();
+    opcoes=(rs.length?rs.map(r=>btn('regiao',r,r,'#93c5fd',r===(l.regiao||''))).join('')
+      :'<span style="font-size:10px;color:#4b5e78">Nenhuma região cadastrada ainda. Cadastre pela extensão.</span>')+(l.regiao?limpar('regiao'):'');
+  }
+  return '<div style="background:#060c18;border:0.5px solid rgba(59,130,246,0.25);border-radius:8px;padding:8px;margin-bottom:9px">'+
+    '<div style="font-size:9px;color:#4b5e78;letter-spacing:.08em;margin-bottom:6px">'+titulo+'</div>'+
+    '<div style="display:flex;gap:4px;flex-wrap:wrap">'+opcoes+'</div>'+
+    (campo==='status'?'<div style="font-size:9px;color:#3a4a63;margin-top:7px">↗ sai deste painel</div>':'')+'</div>';
+}
+function qPainelIA(l){
+  const t=qPrompt(l);
+  return '<div style="margin-top:11px;border-top:0.5px solid rgba(59,130,246,0.15);padding-top:11px">'+
+    '<div id="q-st" style="font-size:11px;color:#4b5e78;margin-bottom:8px;min-height:15px"></div>'+
+    '<textarea id="q-pt" readonly style="width:100%;height:170px;background:#060c18;border:0.5px solid rgba(59,130,246,0.22);'+
+      'border-radius:8px;color:#94a3b8;font-size:11px;padding:9px 11px;outline:none;resize:none;box-sizing:border-box;'+
+      'font-family:ui-monospace,monospace;line-height:1.5">'+escHtml(t)+'</textarea>'+
+    '<div style="display:flex;gap:6px;margin-top:8px">'+
+      '<button class="q-cp" style="flex:1;background:rgba(29,78,216,0.28);border:0.5px solid rgba(59,130,246,0.45);'+
+        'color:#93c5fd;font-size:11px;padding:7px;border-radius:8px;cursor:pointer;font-family:inherit">Copiar de novo</button>'+
+      '<a href="https://chatgpt.com/" target="_blank" rel="noopener" style="flex:1;text-align:center;'+
+        'background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;font-size:11px;padding:7px;border-radius:8px;'+
+        'text-decoration:none">Abrir ChatGPT ↗</a></div></div>';
+}
+
+// Só as negociações que passam pelos filtros, já ordenadas.
+function qFiltrados(){
+  const nome=String(_qF.nome||'').trim().toLowerCase();
+  let out=leads.filter(l=>Q_STATUS.indexOf(l.status)>=0)
+    .filter(l=>{
+      if(!nome) return true;
+      if(String(l.nome||'').toLowerCase().indexOf(nome)>=0) return true;
+      const digitos=nome.replace(/\D/g,'');
+      return digitos.length>=3 && cleanPhone(l.telefone).indexOf(digitos)>=0;
+    })
+    .filter(l=>!_qF.regiao || String(l.regiao||'')===_qF.regiao)
+    .filter(l=>!_qF.perfil || String(l.perfil||'')===_qF.perfil)
+    .map(l=>({l:l,c:qCalor(l)}));
+  if(_qF.ordem==='parado') out.sort((a,b)=>b.c.parado-a.c.parado);
+  else if(_qF.ordem==='nome') out.sort((a,b)=>String(a.l.nome||'').localeCompare(String(b.l.nome||''),'pt-BR'));
+  else out.sort((a,b)=>b.c.pct-a.c.pct);
+  return out;
+}
+// Converte "R$ 1.234.567,89" em 1234567. Sem descartar os centavos, a soma
+// da tela inflaria 100 vezes em qualquer lead importado com casas decimais.
+function qValorNum(v){
+  let t=String(v==null?'':v).trim();
+  if(!t) return 0;
+  t=t.replace(/,\d{1,2}\s*$/,'');   // corta centavos no fim
+  const n=parseInt(t.replace(/\D/g,''),10);
+  return isNaN(n)?0:n;
+}
+
+// Cabeçalho com a barra de filtros recolhível. Fica fechada por padrão: com
+// poucas negociações ela só ocuparia espaço.
+function qTopo(){
+  const alvo=document.getElementById('q-topo');
+  if(!alvo) return;
+  const todos=leads.filter(l=>Q_STATUS.indexOf(l.status)>=0);
+  const vis=qFiltrados();
+  const na=_qAtivos();
+  const soma=vis.reduce((s,o)=>s+qValorNum(o.l.valor),0);
+  const regs=regioesDisponiveis().filter(r=>todos.some(l=>String(l.regiao||'')===r));
+  const IN='background:var(--bg-input);border:0.5px solid rgba(59,130,246,0.25);color:var(--text-primary);'+
+    'font-size:12px;padding:6px 9px;border-radius:7px;outline:none;font-family:inherit';
+  const opt=(v,sel)=>'<option value="'+escHtml(v)+'"'+(sel===v?' selected':'')+'>'+escHtml(v)+'</option>';
+
+  alvo.innerHTML=
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px;flex-wrap:wrap">'+
+      '<div style="display:flex;align-items:baseline;gap:10px">'+
+        '<div class="section-title" style="margin-bottom:0"><i class="ti ti-flame"></i> Negociações quentes</div>'+
+        '<span style="font-size:12px;color:var(--text-muted)"><b style="color:#93c5fd">'+vis.length+'</b>'+(na?(' de '+todos.length):' em aberto')+'</span>'+
+      '</div>'+
+      '<button id="q-toggle" style="background:'+(na?'rgba(59,130,246,0.2)':'transparent')+';border:0.5px solid rgba(59,130,246,'+(na?'0.45':'0.25')+');'+
+        'color:'+(na?'#93c5fd':'var(--text-muted)')+';font-size:12px;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:inherit">'+
+        '<i class="ti ti-filter"></i> Filtros'+(na?' <span style="background:rgba(147,197,253,.25);border-radius:9px;padding:0 6px;font-size:10px;font-weight:700">'+na+'</span>':'')+
+        ' <span style="opacity:.6;display:inline-block;transform:rotate('+(_qFiltroAberto?'180':'0')+'deg)">▾</span></button>'+
+    '</div>'+
+    (_qFiltroAberto?('<div style="background:var(--bg-card);border:0.5px solid rgba(59,130,246,0.2);border-radius:10px;padding:10px;margin-bottom:9px">'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        '<input id="q-fnome" value="'+escHtml(_qF.nome).replace(/"/g,'&quot;')+'" placeholder="Buscar por nome ou telefone..." autocomplete="off" style="'+IN+';flex:1;min-width:150px">'+
+        '<select id="q-freg" style="'+IN+'"><option value="">Todas as regiões</option>'+regs.map(r=>opt(r,_qF.regiao)).join('')+'</select>'+
+        '<select id="q-fperf" style="'+IN+'"><option value="">Todos os perfis</option>'+['Moradia','Investimento'].map(x=>opt(x,_qF.perfil)).join('')+'</select>'+
+        '<select id="q-ford" style="'+IN+'">'+
+          '<option value="calor"'+(_qF.ordem==='calor'?' selected':'')+'>Mais quentes</option>'+
+          '<option value="parado"'+(_qF.ordem==='parado'?' selected':'')+'>Mais parados</option>'+
+          '<option value="nome"'+(_qF.ordem==='nome'?' selected':'')+'>Por nome</option></select>'+
+      '</div></div>'):'')+
+    ((na||soma)?('<div style="font-size:12px;color:var(--text-muted);margin-bottom:9px">'+
+      (na?('<span style="color:var(--text-secondary)">'+[_qF.nome?('"'+escHtml(_qF.nome)+'"'):'',escHtml(_qF.regiao),escHtml(_qF.perfil)].filter(Boolean).join(' · ')+
+      '</span> · <span id="q-limpar" style="color:#fca5a5;cursor:pointer;text-decoration:underline">limpar</span> · '):'')+
+      'valor somado <b style="color:#86efac">R$ '+soma.toLocaleString('pt-BR')+'</b></div>'):'');
+
+  const tg=document.getElementById('q-toggle');
+  if(tg) tg.addEventListener('click',()=>{ _qFiltroAberto=!_qFiltroAberto; renderQuentes(); });
+  if(_qFiltroAberto){
+    const fn=document.getElementById('q-fnome');
+    if(fn) fn.addEventListener('input',()=>{
+      _qF.nome=fn.value; _qMostrar=Q_LOTE; renderQuentes();
+      const n=document.getElementById('q-fnome');
+      if(n){ n.focus(); try{ n.setSelectionRange(n.value.length,n.value.length); }catch(e){} }
+    });
+    const lig=(id,k)=>{ const e=document.getElementById(id); if(e) e.addEventListener('change',()=>{ _qF[k]=e.value; _qMostrar=Q_LOTE; renderQuentes(); }); };
+    lig('q-freg','regiao'); lig('q-fperf','perfil'); lig('q-ford','ordem');
+  }
+  const lp=document.getElementById('q-limpar');
+  if(lp) lp.addEventListener('click',()=>{ _qF={nome:'',regiao:'',perfil:'',ordem:_qF.ordem}; _qMostrar=Q_LOTE; renderQuentes(); });
+}
+
+// Campo de valor editável no card. Grava na raiz do lead, como qualquer
+// outra edição — aparece igual na lista, no Kanban e no Sheets.
+function qBlocoValor(l){
+  if(String(_qValor)===String(l.id)){
+    return '<span style="display:inline-flex;gap:4px;align-items:center">'+
+      '<input id="q-vi" value="'+(qValorNum(l.valor)||'')+'" placeholder="890000" autocomplete="off" '+
+        'style="background:var(--bg-input);border:0.5px solid rgba(59,130,246,0.3);color:var(--text-primary);'+
+        'font-size:11px;padding:2px 7px;border-radius:6px;outline:none;width:100px;font-family:inherit">'+
+      '<button id="q-vok" style="background:#1d4ed8;border:none;color:#fff;font-size:10px;padding:3px 9px;'+
+        'border-radius:6px;cursor:pointer;font-family:inherit">ok</button>'+
+      '<button id="q-vno" style="background:transparent;border:0.5px solid #1e3a5f;color:#4b5e78;font-size:10px;'+
+        'padding:3px 8px;border-radius:6px;cursor:pointer;font-family:inherit">✕</button></span>';
+  }
+  return l.valor
+    ? '<span class="q-vl" data-id="'+l.id+'" style="color:#86efac;cursor:pointer;border-bottom:1px dotted rgba(134,239,172,.4)">'+escHtml(l.valor)+'</span>'
+    : '<span class="q-vl" data-id="'+l.id+'" style="color:#4b5e78;cursor:pointer;border:0.5px dashed rgba(59,130,246,.3);padding:1px 7px;border-radius:20px;font-size:10px">+ valor</span>';
+}
+
+// Bloco de anotações: mostra a última e abre o histórico completo ao clicar.
+function qBlocoNotas(l){
+  const nt=String(l.notas||'').split('\n').filter(x=>x.trim());
+  const todas=(String(_qNotas)===String(l.id));
+  return '<div class="q-nt" data-id="'+l.id+'" style="background:#060c18;border-left:2px solid rgba(59,130,246,0.3);'+
+    'border-radius:0 7px 7px 0;padding:8px 11px;margin-bottom:9px;cursor:pointer">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'+
+      '<span style="font-size:9px;color:#4b5e78;letter-spacing:.08em">'+(todas?('TODAS AS ANOTAÇÕES ('+nt.length+')'):'ÚLTIMA ANOTAÇÃO')+'</span>'+
+      (nt.length>1?('<span style="font-size:9px;color:#60a5fa">'+(todas?'▴ recolher':('▾ ver '+nt.length))+'</span>'):'')+
+    '</div>'+
+    (todas
+      ? nt.map((x,i)=>'<div style="font-size:12px;color:'+(i===nt.length-1?'#94a3b8':'#64748b')+';line-height:1.5;padding:3px 0'+(i?';border-top:0.5px solid rgba(59,130,246,0.1)':'')+'">'+escHtml(x)+'</div>').join('')
+      : '<div style="font-size:12px;color:#94a3b8;line-height:1.5">'+escHtml(nt.length?nt[nt.length-1]:'(sem anotações)')+'</div>')+
+    '</div>';
+}
+
+function renderQuentes(){
+  const cards=document.getElementById('q-cards');
+  if(!cards) return;
+  qTopo();
+  const vis=qFiltrados();
+  const badge=document.getElementById('quentes-badge');
+  if(badge){
+    // Conta sobre a base inteira, não sobre o filtro — senão o badge mentiria
+    // quando você estivesse filtrando por uma região.
+    const q=leads.filter(l=>Q_STATUS.indexOf(l.status)>=0 && qCalor(l).pct>=75).length;
+    if(q){ badge.textContent=q; badge.style.display='inline-block'; } else badge.style.display='none';
+  }
+
+  const total=vis.length;
+  if(_qMostrar>total) _qMostrar=Math.max(Q_LOTE,total);
+  const mostrados=vis.slice(0,_qMostrar);
+  cards.innerHTML = mostrados.length ? mostrados.map(o=>{
+    const l=o.l, c=o.c, cor=qCor(c.pct);
+    const scor=(typeof STATUS_COLOR!=='undefined'&&STATUS_COLOR[l.status])?STATUS_COLOR[l.status]:'#93c5fd';
+    const tel=cleanPhone(l.telefone);
+    const ab=(String(_qAberto)===String(l.id));
+    return '<div style="background:linear-gradient(180deg,#0a1120,#080d18);border:0.5px solid rgba(59,130,246,0.22);'+
+      'border-radius:12px;margin-bottom:10px;overflow:hidden">'+
+      '<div style="height:2px;background:linear-gradient(90deg,'+cor+' '+c.pct+'%,rgba(59,130,246,0.10) '+c.pct+'%)"></div>'+
+      '<div style="padding:13px 15px">'+
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:9px">'+
+        '<div style="min-width:0;flex:1">'+
+          '<div style="font-size:15px;color:#e2e8f0;font-weight:600;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(l.nome||'(sem nome)')+'</div>'+
+          '<div style="font-size:11px;color:#4b5e78;margin-top:2px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+escHtml(tel||'—')+' · '+qBlocoValor(l)+'</div>'+
+        '</div>'+
+        '<div style="flex:none;text-align:right;line-height:1.1">'+
+          '<div style="font-size:19px;color:'+cor+';font-weight:700;letter-spacing:-.02em">'+c.pct+'<span style="font-size:12px;opacity:.7">%</span></div>'+
+          '<div style="font-size:9px;color:#4b5e78;letter-spacing:.08em">CALOR</div></div>'+
+      '</div>'+
+      '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px;align-items:center">'+
+        qChip(l.id,'status',l.status||'Novo',scor,false)+
+        qChip(l.id,'perfil',l.perfil||'perfil',l.perfil?'#86efac':null,!l.perfil)+
+        qChip(l.id,'regiao',l.regiao||'região',l.regiao?'#93c5fd':null,!l.regiao)+
+        '<span style="background:#080f1e;border:0.5px solid rgba(59,130,246,0.22);color:#94a3b8;font-size:10px;'+
+          'padding:2px 9px;border-radius:20px;white-space:nowrap">'+(c.parado>=999?'sem histórico':(c.parado===0?'falaram hoje':c.parado+' dias parado'))+'</span>'+
+      '</div>'+
+      qSeletor(l)+
+      qBlocoNotas(l)+
+      '<div style="font-size:9px;color:#3a4a63;margin-bottom:10px;line-height:1.4">'+escHtml(c.por.join(' · '))+'</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        '<button class="q-an" data-id="'+l.id+'" style="background:'+(ab?'rgba(59,130,246,0.28)':'rgba(29,78,216,0.28)')+';'+
+          'border:0.5px solid rgba(59,130,246,0.45);color:#93c5fd;font-size:11px;padding:6px 14px;border-radius:8px;'+
+          'cursor:pointer;font-family:inherit">'+(ab?'Fechar análise':'Analisar no ChatGPT')+'</button>'+
+        (tel?'<a href="https://wa.me/'+tel+'" target="_blank" rel="noopener" style="background:transparent;'+
+          'border:0.5px solid rgba(59,130,246,0.25);color:#4b5e78;font-size:11px;padding:6px 14px;border-radius:8px;'+
+          'text-decoration:none">Abrir WhatsApp</a>':'')+
+        '<button class="q-ed" data-id="'+l.id+'" style="background:transparent;border:0.5px solid rgba(59,130,246,0.25);'+
+          'color:#4b5e78;font-size:11px;padding:6px 14px;border-radius:8px;cursor:pointer;font-family:inherit">Editar lead</button>'+
+      '</div>'+
+      (ab?qPainelIA(l):'')+
+      '</div></div>';
+  }).join('') + (total>_qMostrar
+      ? '<div style="text-align:center;padding:6px 0 14px">'+
+        '<button id="q-mais" style="background:rgba(29,78,216,0.22);border:0.5px solid rgba(59,130,246,0.4);'+
+        'color:#93c5fd;font-size:12px;padding:8px 18px;border-radius:8px;cursor:pointer;font-family:inherit">'+
+        'Mostrar mais '+Math.min(Q_LOTE,total-_qMostrar)+' <span style="color:#4b5e78">· '+(total-_qMostrar)+' restantes</span></button>'+
+        '<div style="font-size:11px;color:#3a4a63;margin-top:7px">Use os filtros para chegar mais rápido no que procura.</div></div>'
+      : '') : (_qAtivos()
+      ? '<div style="text-align:center;padding:34px 12px;color:var(--text-muted);font-size:13px;line-height:1.7">'+
+        'Nenhuma negociação com esse filtro.<br><span id="q-limpar2" style="font-size:11px;color:#fca5a5;cursor:pointer;text-decoration:underline">limpar filtros</span></div>'
+      : '<div style="text-align:center;padding:34px 12px;color:var(--text-muted);font-size:13px;line-height:1.7">'+
+        'Nenhuma negociação em aberto.<br><span style="font-size:11px;color:#3a4a63">Aparecem aqui: '+Q_STATUS.join(' · ')+'</span></div>');
+
+  cards.querySelectorAll('.q-ch').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const id=b.dataset.id, cp=b.dataset.c;
+      _qEdit=(_qEdit && String(_qEdit.id)===String(id) && _qEdit.campo===cp)?null:{id:id,campo:cp};
+      _qAberto=null; renderQuentes();
+    });
+  });
+  cards.querySelectorAll('.q-op').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const id=b.dataset.id, cp=b.dataset.c, v=b.dataset.v;
+      const l=leads.find(x=>String(x.id)===String(id));
+      if(!l) return;
+      const antes=l[cp]||'(vazio)';
+      l[cp]=v;
+      save();
+      _qEdit=null; _qValor=null;
+      const rot=(cp==='status')?'Status':(cp==='perfil'?'Perfil':'Região');
+      if(cp==='status' && Q_STATUS.indexOf(v)<0) qAviso('<b>'+escHtml(l.nome||'')+'</b> mudou para <b>'+escHtml(v)+'</b> e saiu do painel.','#fcd34d');
+      else qAviso('<b>'+escHtml(l.nome||'')+'</b> · '+rot+': '+escHtml(antes)+' → <b>'+escHtml(v||'(vazio)')+'</b>','#86efac');
+      renderQuentes();
+    });
+  });
+  cards.querySelectorAll('.q-an').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const id=b.dataset.id;
+      _qAberto=(String(_qAberto)===String(id))?null:id;
+      _qEdit=null; renderQuentes();
+      if(_qAberto!==null){
+        const l=leads.find(x=>String(x.id)===String(id));
+        if(l) qCopiar(qPrompt(l));
+      }
+    });
+  });
+  cards.querySelectorAll('.q-cp').forEach(b=>{
+    b.addEventListener('click',()=>{ const ta=document.getElementById('q-pt'); if(ta) qCopiar(ta.value); });
+  });
+  cards.querySelectorAll('.q-ed').forEach(b=>{
+    b.addEventListener('click',()=>openModal(b.dataset.id));
+  });
+  // Anotações: abre/fecha o histórico completo
+  cards.querySelectorAll('.q-nt').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const id=b.dataset.id;
+      _qNotas=(String(_qNotas)===String(id))?null:id;
+      renderQuentes();
+    });
+  });
+  // Valor: clique abre o campo, grava na raiz do lead
+  cards.querySelectorAll('.q-vl').forEach(b=>{
+    b.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      _qValor=b.dataset.id; _qEdit=null; _qAberto=null;
+      renderQuentes();
+      const i=document.getElementById('q-vi');
+      if(i){ i.focus(); try{ i.select(); }catch(e){} }
+    });
+  });
+  const vok=document.getElementById('q-vok'), vno=document.getElementById('q-vno'), vi=document.getElementById('q-vi');
+  if(vok) vok.addEventListener('click',()=>{
+    const l=leads.find(x=>String(x.id)===String(_qValor));
+    if(l){
+      const n=parseInt(String(vi.value).replace(/\D/g,''))||0;
+      l.valor = n ? ('R$ '+n.toLocaleString('pt-BR')) : '';
+      save();
+      qAviso('<b>'+escHtml(l.nome||'')+'</b> · valor: <b>'+escHtml(l.valor||'(vazio)')+'</b> — salvo no lead','#86efac');
+    }
+    _qValor=null; renderQuentes();
+  });
+  if(vno) vno.addEventListener('click',()=>{ _qValor=null; renderQuentes(); });
+  if(vi) vi.addEventListener('keydown',ev=>{
+    if(ev.key==='Enter'){ ev.preventDefault(); if(vok) vok.click(); }
+    if(ev.key==='Escape'){ ev.preventDefault(); if(vno) vno.click(); }
+  });
+  const mais=document.getElementById('q-mais');
+  if(mais) mais.addEventListener('click',()=>{ _qMostrar+=Q_LOTE; renderQuentes(); });
+  const lp2=document.getElementById('q-limpar2');
+  if(lp2) lp2.addEventListener('click',()=>{ _qF={nome:'',regiao:'',perfil:'',ordem:_qF.ordem}; _qMostrar=Q_LOTE; renderQuentes(); });
+}
+function qCopiar(txt){
+  const s=document.getElementById('q-st');
+  const ok=(m,c)=>{ if(s){ s.textContent=m; s.style.color=c; } };
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(()=>ok('✓ Copiado — cole no ChatGPT com Ctrl+V','#86efac'),
+                                              ()=>ok('Selecione o texto e use Ctrl+C','#fcd34d'));
+      return;
+    }
+  }catch(e){}
+  const ta=document.getElementById('q-pt');
+  let feito=false;
+  try{ if(ta){ ta.focus(); ta.select(); feito=document.execCommand('copy'); } }catch(e){}
+  ok(feito?'✓ Copiado — cole no ChatGPT com Ctrl+V':'Selecione o texto e use Ctrl+C', feito?'#86efac':'#fcd34d');
+}
+
 function exportarRetomar(){
   const d=retDados();
   const rows=[['Grupo','Nome','Telefone','Status','Perfil','Regiao','Eu_falei','Ele_falou','Dias_parado']];
@@ -1304,6 +1706,7 @@ function showPage(name,btn){
   if(name==='exportar') refreshExportPreview();
   if(name==='relatorio') renderRelatorio();
   if(name==='retomar') renderRetomar();
+  if(name==='quentes') renderQuentes();
 }
 
 // ─── STATS ───────────────────────────────────────────────────────────────────
@@ -1476,7 +1879,7 @@ function renderLeads(){
 // ─── KANBAN ──────────────────────────────────────────────────────────────────
 function renderKanban(){
   const el=document.getElementById('kanban');
-  const colors={'Novo':'#60a5fa','Contato feito':'#7dd3fc','Interações':'#22d3ee','Em negociação':'#a5b4fc','Proposta enviada':'#d8b4fe','Fechado':'#86efac','Perdido':'#fca5a5','Gold ⭐':'#fde047','Manter Atualizado':'#a5b4fc','Pronto':'#6ee7b7','Moradia':'#fcd34d','Crítico':'#fca5a5'};
+  const colors=STATUS_COLOR;
   el.innerHTML=STATUSES.map(s=>{
     const cols=leads.filter(l=>l.status===s);
     const cards=cols.map(l=>`
@@ -1547,6 +1950,26 @@ function renderDashboard(){
     </div>`).join('')||'<div style="color:var(--text-muted);font-size:13px">Sem dados de valor</div>';
 }
 
+// ─── REGIÕES ─────────────────────────────────────────────────────────────────
+// A lista vem da extensão (chave crm_regioes, entregue pela bridge) somada às
+// regiões que já aparecem nos leads. Assim ela acompanha o que você cadastra
+// no WhatsApp, sem precisar cadastrar duas vezes.
+let regioesExt=[];
+try{ regioesExt=JSON.parse(localStorage.getItem('crm_regioes')||'[]')||[]; }catch(e){ regioesExt=[]; }
+
+function regioesDisponiveis(){
+  const vistas=new Map();
+  const juntar=r=>{
+    const v=String(r||'').trim();
+    if(!v) return;
+    const k=v.toLowerCase();
+    if(!vistas.has(k)) vistas.set(k,v);
+  };
+  (regioesExt||[]).forEach(juntar);
+  leads.forEach(l=>juntar(l.regiao));
+  return [...vistas.values()].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+}
+
 function renderAll(){
   renderStats();
   renderLeads();
@@ -1554,6 +1977,12 @@ function renderAll(){
   if(kPage&&kPage.classList.contains('active')) renderKanban();
   const dPage=document.getElementById('page-dashboard');
   if(dPage&&dPage.classList.contains('active')) renderDashboard();
+  // Quentes e Retomar também são espelhos da base: quando a extensão salva uma
+  // anotação ou muda um status, elas precisam refletir na hora.
+  const qPage=document.getElementById('page-quentes');
+  if(qPage&&qPage.classList.contains('active')&&typeof renderQuentes==='function') renderQuentes();
+  const rPage=document.getElementById('page-retomar');
+  if(rPage&&rPage.classList.contains('active')&&typeof renderRetomar==='function') renderRetomar();
 }
 function refreshCRM(){
   const btn=document.getElementById('refresh-btn');
@@ -2119,13 +2548,25 @@ window.addEventListener('message', e => {
   if(!e.data) return;
   if(e.data.type === 'CRM_UPDATED' && e.data.leads) {
     try{
+      const _qAntes=(typeof Q_STATUS!=='undefined')?leads.filter(l=>Q_STATUS.indexOf(l.status)>=0).length:0;
       leads = JSON.parse(e.data.leads).map(l=>({...l,id:String(l.id)}));
       localStorage.setItem('crm_leads', e.data.leads);
+      // Regiões cadastradas na extensão
+      if(e.data.regioes){
+        try{ regioesExt=JSON.parse(e.data.regioes)||[]; localStorage.setItem('crm_regioes', e.data.regioes); }catch(er){}
+      }
       // Também atualiza as ligações (registro de chamadas) se vierem junto
       if(e.data.calls){
         try{ calls=JSON.parse(e.data.calls); localStorage.setItem('crm_calls', e.data.calls); }catch{}
       }
       renderAll();
+      if(typeof Q_STATUS!=='undefined'){
+        const _qDepois=leads.filter(l=>Q_STATUS.indexOf(l.status)>=0).length;
+        const qPage=document.getElementById('page-quentes');
+        if(qPage&&qPage.classList.contains('active')&&_qDepois!==_qAntes){
+          qAviso('Atualizado pela extensão — agora são <b>'+_qDepois+'</b> negociações em aberto.','#93c5fd');
+        }
+      }
       showToast('🔄 CRM atualizado pela extensão!');
     }catch(e2){}
   }
@@ -2136,6 +2577,15 @@ window.addEventListener('message', e => {
       window.postMessage({type:'CRM_SAVE', leads:raw, calls:null}, '*');
       showToast('🔗 '+leads.length+' leads enviados para a extensão');
     }
+    // E PEDE as regiões cadastradas na extensão
+    window.postMessage({type:'CRM_LOAD'}, '*');
+  }
+  if(e.data.type === 'CRM_LOADED' && e.data.regioes){
+    try{
+      regioesExt=JSON.parse(e.data.regioes)||[];
+      localStorage.setItem('crm_regioes', e.data.regioes);
+      if(document.getElementById('page-quentes') && !document.getElementById('page-quentes').classList.contains('hidden')) renderQuentes();
+    }catch(er){}
   }
   if(e.data.type === 'CRM_SAVED') {
     // Confirmação de que o bridge gravou no chrome.storage
@@ -2298,6 +2748,14 @@ window.addEventListener('message', e => {
   <div id="ret-bola"></div>
   <div id="ret-aguardando" style="margin-top:1.6rem"></div>
   <div id="ret-semdados" style="margin-top:1.6rem"></div>
+</div>
+</div>
+
+<div class="page" id="page-quentes">
+<div class="container">
+  <div id="q-topo"></div>
+  <div id="q-aviso" style="font-size:13px;min-height:20px;margin-bottom:8px"></div>
+  <div id="q-cards"></div>
 </div>
 </div>
 
