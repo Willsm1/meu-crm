@@ -201,15 +201,18 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
 <div id="crm-progress-bar"><div class="bar" id="crm-pb-fill"></div><div class="label" id="crm-pb-label"></div></div>
 <nav class="nav">
   <div class="nav-brand"><i class="ti ti-address-book"></i> Taurus Magnum CRM</div>
-  <button class="nav-tab active" onclick="showPage('leads',this)"><i class="ti ti-list"></i> Leads</button>
-  <button class="nav-tab" onclick="showPage('kanban',this)"><i class="ti ti-layout-kanban"></i> Kanban</button>
-  <button class="nav-tab" onclick="showPage('dashboard',this)"><i class="ti ti-chart-bar"></i> Dashboard</button>
-  <button class="nav-tab" onclick="showPage('import',this)"><i class="ti ti-file-import"></i> Importar</button>
-  <button class="nav-tab" onclick="showPage('exportar',this)"><i class="ti ti-file-export"></i> Exportar</button>
-  <button class="nav-tab" onclick="showPage('quentes',this)"><i class="ti ti-flame"></i> Quentes <span id="quentes-badge" style="display:none;background:rgba(252,165,165,.2);color:#fca5a5;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700"></span></button>
-  <button class="nav-tab" onclick="showPage('retomar',this)"><i class="ti ti-rotate-clockwise"></i> Retomar <span id="retomar-badge" style="display:none;background:rgba(252,211,77,.2);color:#fcd34d;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700"></span></button>
-  <button class="nav-tab" onclick="showPage('relatorio',this)"><i class="ti ti-chart-line"></i> Relatório</button>
+  <button class="nav-tab active" data-tab="leads" onclick="showPage('leads',this)"><i class="ti ti-list"></i> Leads</button>
+  <button class="nav-tab" data-tab="kanban" onclick="showPage('kanban',this)"><i class="ti ti-layout-kanban"></i> Kanban</button>
+  <button class="nav-tab" data-tab="dashboard" onclick="showPage('dashboard',this)"><i class="ti ti-chart-bar"></i> Dashboard</button>
+  <button class="nav-tab" data-tab="import" onclick="showPage('import',this)"><i class="ti ti-file-import"></i> Importar</button>
+  <button class="nav-tab" data-tab="exportar" onclick="showPage('exportar',this)"><i class="ti ti-file-export"></i> Exportar</button>
+  <button class="nav-tab" data-tab="quentes" onclick="showPage('quentes',this)"><i class="ti ti-flame"></i> Quentes <span id="quentes-badge" style="display:none;background:rgba(252,165,165,.2);color:#fca5a5;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700"></span></button>
+  <button class="nav-tab" data-tab="retomar" onclick="showPage('retomar',this)"><i class="ti ti-rotate-clockwise"></i> Retomar <span id="retomar-badge" style="display:none;background:rgba(252,211,77,.2);color:#fcd34d;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700"></span></button>
+  <button class="nav-tab" data-tab="relatorio" onclick="showPage('relatorio',this)"><i class="ti ti-chart-line"></i> Relatório</button>
+  <button class="nav-tab" data-tab="script" onclick="showPage('script',this)"><i class="ti ti-message-2-code"></i> Script CRM</button>
   <div class="nav-spacer"></div>
+  <button class="nav-btn" id="cfg-abas" onclick="toggleMenuAbas(event)" title="Escolher quais abas aparecem" style="padding:6px 10px"><i class="ti ti-adjustments-horizontal"></i></button>
+  <div id="menu-abas" style="display:none;position:absolute;right:12px;top:46px;z-index:60;background:var(--bg-card);border:0.5px solid rgba(59,130,246,0.35);border-radius:10px;padding:10px;min-width:200px;box-shadow:0 10px 30px rgba(0,0,0,.6)"></div>
   <button class="nav-btn" id="refresh-btn" onclick="refreshCRM()" title="Atualizar dados do CRM"><i class="ti ti-refresh"></i> Atualizar</button>
   <button class="nav-btn" onclick="removerDuplicatas()" title="Remover leads duplicados" style="color:#fcd34d"><i class="ti ti-copy-off"></i> Remover Duplicatas</button>
   <button class="nav-btn" onclick="showPage('relatorio',document.querySelector('.nav-tab[onclick*=relatorio]'))" style="display:none" id="nav-rel-btn"></button>
@@ -1304,6 +1307,246 @@ function qCopiar(txt){
   ok(feito?'✓ Copiado — cole no ChatGPT com Ctrl+V':'Selecione o texto e use Ctrl+C', feito?'#86efac':'#fcd34d');
 }
 
+// ─── MENU DE ABAS VISÍVEIS ───────────────────────────────────────────────────
+// Você tem 9 abas mas usa 5 no dia a dia. A escolha fica salva no navegador.
+const ABAS_TODAS=[['leads','Leads'],['kanban','Kanban'],['dashboard','Dashboard'],
+  ['quentes','Quentes'],['retomar','Retomar'],['relatorio','Relatório'],
+  ['script','Script CRM'],['import','Importar'],['exportar','Exportar']];
+const ABAS_PADRAO=['leads','kanban','dashboard','quentes','retomar'];
+let abasVisiveis=ABAS_PADRAO.slice();
+try{
+  const g=JSON.parse(localStorage.getItem('crm_abas')||'null');
+  if(Array.isArray(g)&&g.length) abasVisiveis=g.filter(x=>ABAS_TODAS.some(a=>a[0]===x));
+  if(!abasVisiveis.length) abasVisiveis=ABAS_PADRAO.slice();
+}catch(e){}
+
+function salvarAbas(){ try{ localStorage.setItem('crm_abas',JSON.stringify(abasVisiveis)); }catch(e){} }
+
+function aplicarAbas(){
+  document.querySelectorAll('.nav-tab[data-tab]').forEach(b=>{
+    b.style.display = abasVisiveis.indexOf(b.dataset.tab)>=0 ? '' : 'none';
+  });
+  // Se a aba aberta foi escondida, vai para a primeira visível — senão a tela
+  // ficaria em branco sem nenhuma aba marcada.
+  const atual=document.querySelector('.page.active');
+  if(atual){
+    const id=atual.id.replace('page-','');
+    if(abasVisiveis.indexOf(id)<0){
+      const alvo=document.querySelector('.nav-tab[data-tab="'+abasVisiveis[0]+'"]');
+      if(alvo) alvo.click();
+    }
+  }
+}
+function toggleMenuAbas(ev){
+  if(ev) ev.stopPropagation();
+  const m=document.getElementById('menu-abas');
+  if(!m) return;
+  const abrir=(m.style.display==='none');
+  m.style.display=abrir?'block':'none';
+  if(abrir) desenharMenuAbas();
+}
+function desenharMenuAbas(){
+  const m=document.getElementById('menu-abas');
+  if(!m) return;
+  m.innerHTML='<div style="font-size:10px;color:var(--text-muted);letter-spacing:.06em;margin-bottom:8px">ABAS VISÍVEIS</div>'+
+    ABAS_TODAS.map(a=>{
+      const on=abasVisiveis.indexOf(a[0])>=0;
+      return '<button class="ma-tg" data-a="'+a[0]+'" style="width:100%;display:flex;align-items:center;gap:8px;'+
+        'background:transparent;border:none;color:'+(on?'var(--text-primary)':'var(--text-muted)')+';font-size:12px;'+
+        'padding:5px 4px;cursor:pointer;text-align:left;font-family:inherit">'+
+        '<span style="flex:none;width:15px;height:15px;border-radius:4px;border:0.5px solid '+(on?'#3b82f6':'rgba(59,130,246,0.3)')+';'+
+        'background:'+(on?'#1d4ed8':'transparent')+';color:#fff;font-size:10px;line-height:15px;text-align:center">'+(on?'✓':'')+'</span>'+
+        a[1]+'</button>';
+    }).join('')+
+    '<div style="border-top:0.5px solid rgba(59,130,246,0.15);margin-top:8px;padding-top:8px;display:flex;gap:5px">'+
+      '<button id="ma-padrao" style="flex:1;background:transparent;border:0.5px solid rgba(59,130,246,0.25);color:var(--text-muted);font-size:11px;padding:5px;border-radius:6px;cursor:pointer;font-family:inherit">Padrão</button>'+
+      '<button id="ma-todas" style="flex:1;background:transparent;border:0.5px solid rgba(59,130,246,0.25);color:var(--text-muted);font-size:11px;padding:5px;border-radius:6px;cursor:pointer;font-family:inherit">Todas</button>'+
+    '</div><div id="ma-msg" style="font-size:10px;color:#fca5a5;min-height:13px;margin-top:5px;text-align:center"></div>';
+
+  m.querySelectorAll('.ma-tg').forEach(b=>{
+    b.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      const a=b.dataset.a, i=abasVisiveis.indexOf(a);
+      if(i>=0){
+        if(abasVisiveis.length<=1){ document.getElementById('ma-msg').textContent='Deixe pelo menos uma aba.'; return; }
+        abasVisiveis.splice(i,1);
+      } else {
+        abasVisiveis.push(a);
+        abasVisiveis.sort((x,y)=>ABAS_TODAS.findIndex(z=>z[0]===x)-ABAS_TODAS.findIndex(z=>z[0]===y));
+      }
+      salvarAbas(); aplicarAbas(); desenharMenuAbas();
+    });
+  });
+  document.getElementById('ma-padrao').addEventListener('click',ev=>{ ev.stopPropagation();
+    abasVisiveis=ABAS_PADRAO.slice(); salvarAbas(); aplicarAbas(); desenharMenuAbas(); });
+  document.getElementById('ma-todas').addEventListener('click',ev=>{ ev.stopPropagation();
+    abasVisiveis=ABAS_TODAS.map(a=>a[0]); salvarAbas(); aplicarAbas(); desenharMenuAbas(); });
+}
+document.addEventListener('click',()=>{ const m=document.getElementById('menu-abas'); if(m) m.style.display='none'; });
+
+// ─── SCRIPT CRM (textos rápidos) ─────────────────────────────────────────────
+// Os textos vivem no chrome.storage da extensão, que zera se você recarregar a
+// extensão de outra pasta. Guardando uma cópia aqui no CRM (localStorage do
+// GitHub Pages, que sobrevive a isso), dá para restaurar sem baixar arquivo.
+const SC_GERAL='Geral';
+let scDados={pastas:[SC_GERAL],itens:[]}, scExt=null, scPasta=SC_GERAL, scEdit=null, scMsg='';
+try{
+  const g=JSON.parse(localStorage.getItem('crm_textos_crm')||'null');
+  if(g&&Array.isArray(g.itens)) scDados=scNormalizar(g);
+}catch(e){}
+
+function scNormalizar(b){
+  let itens=[],lista=[SC_GERAL];
+  if(Array.isArray(b)) itens=b;
+  else if(b&&typeof b==='object'){
+    itens=Array.isArray(b.itens)?b.itens:[];
+    if(Array.isArray(b.pastas)&&b.pastas.length) lista=b.pastas.slice();
+  }
+  itens=itens.filter(x=>x&&typeof x==='object'&&x.c)
+             .map(x=>({p:String(x.p||SC_GERAL),t:String(x.t||''),c:String(x.c||'')}));
+  itens.forEach(x=>{ if(lista.indexOf(x.p)<0) lista.push(x.p); });
+  if(lista.indexOf(SC_GERAL)<0) lista.unshift(SC_GERAL);
+  return {pastas:lista,itens:itens};
+}
+function scSalvar(){ try{ localStorage.setItem('crm_textos_crm',JSON.stringify(scDados)); }catch(e){} }
+function scQtd(p){ return scDados.itens.filter(x=>x.p===p).length; }
+
+// Manda para a extensão pela ponte
+function scEnviar(){
+  if(!scDados.itens.length && !confirm('Enviar uma lista VAZIA vai apagar os textos da extensão. Continuar?')) return;
+  window.postMessage({type:'CRM_SAVE_TEXTOS', textos:JSON.stringify({
+    itens:scDados.itens, pastas:scDados.pastas, atual:SC_GERAL
+  })},'*');
+  scMsg='Enviado: '+scDados.itens.length+' textos em '+scDados.pastas.length+' pastas';
+  renderScript();
+}
+function scPuxar(){
+  window.postMessage({type:'CRM_LOAD'},'*');
+  scMsg='Pedindo os textos da extensão...';
+  renderScript();
+  setTimeout(()=>{
+    if(scExt===null){ scMsg='A extensão não respondeu. Abra o WhatsApp Web numa aba.'; renderScript(); return; }
+    scDados=scNormalizar(scExt);
+    if(scPasta && scDados.pastas.indexOf(scPasta)<0) scPasta=SC_GERAL;
+    scSalvar();
+    scMsg='Trazido da extensão: '+scDados.itens.length+' textos';
+    renderScript();
+  },700);
+}
+
+function renderScript(){
+  const corpo=document.getElementById('sc-corpo');
+  if(!corpo) return;
+  const cont=document.getElementById('sc-cont');
+  if(cont) cont.textContent=scDados.itens.length+' textos em '+scDados.pastas.length+' pastas';
+
+  const st=document.getElementById('sc-status');
+  if(st){
+    let txt='', cor='var(--text-muted)';
+    if(scExt===null){ txt='● extensão não conectada — abra o WhatsApp Web numa aba'; cor='#4b5e78'; }
+    else{
+      const e=scNormalizar(scExt);
+      if(JSON.stringify(e)===JSON.stringify(scDados)){ txt='● em dia com a extensão'; cor='#86efac'; }
+      else if(!e.itens.length){ txt='● a extensão está vazia — clique em "Enviar para extensão" para restaurar'; cor='#fcd34d'; }
+      else { txt='● diferente da extensão ('+e.itens.length+' lá · '+scDados.itens.length+' aqui)'; cor='#fcd34d'; }
+    }
+    st.innerHTML='<span style="color:'+cor+'">'+txt+'</span>'+(scMsg?(' · <span style="color:#86efac">'+escHtml(scMsg)+'</span>'):'');
+  }
+  scMsg='';
+
+  if(scDados.pastas.indexOf(scPasta)<0) scPasta=SC_GERAL;
+  const pa=document.getElementById('sc-pastas');
+  if(pa){
+    pa.innerHTML=scDados.pastas.map(p=>{
+      const on=(p===scPasta), n=scQtd(p);
+      return '<button class="sc-p" data-p="'+escHtml(p).replace(/"/g,'&quot;')+'" style="background:'+(on?'rgba(59,130,246,0.22)':'transparent')+
+        ';border:0.5px solid '+(on?'rgba(147,197,253,0.55)':'rgba(59,130,246,0.22)')+';color:'+(on?'#93c5fd':'var(--text-muted)')+
+        ';font-size:11px;padding:3px 11px;border-radius:20px;cursor:pointer;font-family:inherit">'+escHtml(p)+(n?(' <span style="opacity:.6">'+n+'</span>'):'')+'</button>';
+    }).join('')+
+    '<button id="sc-np" style="background:transparent;border:0.5px dashed rgba(59,130,246,0.35);color:#60a5fa;font-size:11px;padding:3px 11px;border-radius:20px;cursor:pointer;font-family:inherit">+ pasta</button>'+
+    (scPasta!==SC_GERAL?'<button id="sc-dp" style="background:rgba(220,38,38,0.12);border:0.5px solid rgba(252,165,165,0.35);color:#fca5a5;font-size:11px;padding:3px 10px;border-radius:20px;cursor:pointer;font-family:inherit">✕ excluir pasta</button>':'');
+    pa.querySelectorAll('.sc-p').forEach(b=>b.addEventListener('click',()=>{ scPasta=b.dataset.p; scEdit=null; renderScript(); }));
+    const np=document.getElementById('sc-np');
+    if(np) np.addEventListener('click',()=>{
+      const n=prompt('Nome da pasta:');
+      if(!n||!n.trim()) return;
+      const nn=n.trim();
+      if(scDados.pastas.indexOf(nn)>=0){ alert('Já existe uma pasta com esse nome.'); return; }
+      scDados.pastas.push(nn); scPasta=nn; scSalvar(); renderScript();
+    });
+    const dp=document.getElementById('sc-dp');
+    if(dp) dp.addEventListener('click',()=>{
+      const q=scQtd(scPasta);
+      if(!confirm('Excluir a pasta "'+scPasta+'"?'+(q?('\n\n'+q+' texto(s) vão para "Geral". Nenhum será apagado.'):'\n\nEla está vazia.'))) return;
+      scDados.itens.forEach(x=>{ if(x.p===scPasta) x.p=SC_GERAL; });
+      scDados.pastas=scDados.pastas.filter(x=>x!==scPasta);
+      scPasta=SC_GERAL; scSalvar(); renderScript();
+    });
+  }
+
+  if(scEdit!==null){ corpo.innerHTML=scForm(); scLigarForm(); return; }
+
+  const lista=scDados.itens.map((x,i)=>({x:x,i:i})).filter(o=>o.x.p===scPasta);
+  corpo.innerHTML='<div class="table-wrap"><table><thead><tr>'+
+    '<th style="width:26%">Título</th><th>Mensagem</th><th style="width:80px;text-align:right">Ações</th></tr></thead><tbody>'+
+    (lista.length?lista.map(o=>'<tr>'+
+      '<td style="color:#93c5fd;vertical-align:top">'+escHtml(o.x.t||'(sem título)')+'</td>'+
+      '<td style="color:var(--text-secondary);line-height:1.5;font-size:12px">'+escHtml(o.x.c)+'</td>'+
+      '<td style="text-align:right;white-space:nowrap">'+
+        '<span class="sc-ed" data-i="'+o.i+'" title="Editar" style="color:var(--text-muted);cursor:pointer;margin-right:10px">✎</span>'+
+        '<span class="sc-dl" data-i="'+o.i+'" title="Excluir" style="color:#fca5a5;cursor:pointer">✕</span></td></tr>').join('')
+      :'<tr><td colspan="3" style="text-align:center;padding:24px;color:var(--text-muted)">Pasta vazia.</td></tr>')+
+    '</tbody></table></div>'+
+    '<button class="btn" id="sc-novo" style="margin-top:11px"><i class="ti ti-plus"></i> Novo texto</button>';
+
+  corpo.querySelectorAll('.sc-ed').forEach(b=>b.addEventListener('click',()=>{ scEdit=parseInt(b.dataset.i,10); renderScript(); }));
+  corpo.querySelectorAll('.sc-dl').forEach(b=>b.addEventListener('click',()=>{
+    const i=parseInt(b.dataset.i,10);
+    if(!confirm('Excluir o texto "'+(scDados.itens[i].t||'')+'"?')) return;
+    scDados.itens.splice(i,1); scSalvar(); scMsg='texto excluído — envie para a extensão'; renderScript();
+  }));
+  document.getElementById('sc-novo').addEventListener('click',()=>{ scEdit=-1; renderScript(); });
+}
+function scForm(){
+  const novo=(scEdit<0), at=novo?{t:'',c:'',p:scPasta}:scDados.itens[scEdit];
+  return '<div style="max-width:560px">'+
+    '<div style="font-size:13px;color:#93c5fd;font-weight:600;margin-bottom:11px">'+(novo?'Novo texto':'Editar texto')+' · '+escHtml(at.p||scPasta)+'</div>'+
+    '<div class="form-row"><label>Título</label><input id="sc-ft" value="'+escHtml(at.t).replace(/"/g,'&quot;')+'" autocomplete="off"></div>'+
+    '<div class="form-row"><label>Mensagem</label><textarea id="sc-fc" style="height:120px">'+escHtml(at.c)+'</textarea></div>'+
+    '<div style="display:flex;gap:6px;margin:7px 0 12px">'+
+      '<button id="sc-bs" style="background:rgba(253,224,71,0.13);border:0.5px solid rgba(253,224,71,0.45);color:#fde047;font-size:11px;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:inherit">+ saudação</button>'+
+      '<button id="sc-bn" style="background:rgba(147,197,253,0.13);border:0.5px solid rgba(147,197,253,0.45);color:#93c5fd;font-size:11px;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:inherit">+ nome</button>'+
+      '<span style="font-size:11px;color:var(--text-muted);align-self:center">viram o nome e a saudação do cliente</span>'+
+    '</div>'+
+    '<div style="display:flex;gap:6px"><button class="btn" id="sc-fx">Cancelar</button>'+
+    '<button class="btn btn-primary" id="sc-fs">Salvar</button></div>'+
+    '<div id="sc-fe" style="font-size:11px;color:#fca5a5;min-height:15px;margin-top:7px"></div></div>';
+}
+function scLigarForm(){
+  const ta=document.getElementById('sc-fc');
+  function ins(M){
+    const v=ta.value, a=(ta.selectionStart==null)?v.length:ta.selectionStart, b=(ta.selectionEnd==null)?a:ta.selectionEnd;
+    const an=v.slice(0,a), dp=v.slice(b);
+    const pre=(an!==''&&!/[\s(\[{"']$/.test(an.slice(-1)))?' ':'';
+    const pos=(dp!==''&&/[A-Za-zÀ-ÿ0-9{]/.test(dp.slice(0,1)))?' ':'';
+    ta.value=an+pre+M+pos+dp;
+    const c=a+pre.length+M.length;
+    ta.focus(); try{ ta.setSelectionRange(c,c); }catch(e){}
+  }
+  ['sc-bs','sc-bn'].forEach(id=>{ const b=document.getElementById(id); if(b) b.addEventListener('mousedown',e=>e.preventDefault()); });
+  document.getElementById('sc-bs').addEventListener('click',e=>{ e.preventDefault(); ins('{saudacao}'); });
+  document.getElementById('sc-bn').addEventListener('click',e=>{ e.preventDefault(); ins('{nome}'); });
+  document.getElementById('sc-fs').addEventListener('click',()=>{
+    const t=document.getElementById('sc-ft').value.trim(), c=ta.value.trim();
+    if(!c){ document.getElementById('sc-fe').textContent='Escreva a mensagem.'; return; }
+    if(scEdit<0) scDados.itens.push({p:scPasta,t:t||c.slice(0,24),c:c});
+    else scDados.itens[scEdit]={p:scDados.itens[scEdit].p,t:t||c.slice(0,24),c:c};
+    scEdit=null; scSalvar(); scMsg='texto salvo — envie para a extensão'; renderScript();
+  });
+  document.getElementById('sc-fx').addEventListener('click',()=>{ scEdit=null; renderScript(); });
+  const ft=document.getElementById('sc-ft'); if(ft) ft.focus();
+}
+
 function exportarRetomar(){
   const d=retDados();
   const rows=[['Grupo','Nome','Telefone','Status','Perfil','Regiao','Eu_falei','Ele_falou','Dias_parado']];
@@ -1707,6 +1950,7 @@ function showPage(name,btn){
   if(name==='relatorio') renderRelatorio();
   if(name==='retomar') renderRetomar();
   if(name==='quentes') renderQuentes();
+  if(name==='script') renderScript();
 }
 
 // ─── STATS ───────────────────────────────────────────────────────────────────
@@ -2526,6 +2770,7 @@ function showToast(msg){
   _toastTimer=setTimeout(()=>t.classList.remove('show'),3000);
 }
 load();
+try{ aplicarAbas(); }catch(e){}
 
 // Listen for storage changes — direct chrome.storage or bridge postMessage
 if(typeof chrome !== 'undefined' && chrome.storage) {
@@ -2579,6 +2824,11 @@ window.addEventListener('message', e => {
     }
     // E PEDE as regiões cadastradas na extensão
     window.postMessage({type:'CRM_LOAD'}, '*');
+  }
+  if(e.data.type === 'CRM_LOADED' && e.data.textos!==undefined){
+    try{ scExt=JSON.parse(e.data.textos||'null'); }catch(er){ scExt=null; }
+    const pg=document.getElementById('page-script');
+    if(pg&&pg.classList.contains('active')&&typeof renderScript==='function') renderScript();
   }
   if(e.data.type === 'CRM_LOADED' && e.data.regioes){
     try{
@@ -2756,6 +3006,24 @@ window.addEventListener('message', e => {
   <div id="q-topo"></div>
   <div id="q-aviso" style="font-size:13px;min-height:20px;margin-bottom:8px"></div>
   <div id="q-cards"></div>
+</div>
+</div>
+
+<div class="page" id="page-script">
+<div class="container">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px;flex-wrap:wrap">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <div class="section-title" style="margin-bottom:0"><i class="ti ti-message-2-code"></i> Script CRM</div>
+      <span id="sc-cont" style="font-size:12px;color:var(--text-muted)"></span>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn" onclick="scPuxar()"><i class="ti ti-arrow-down"></i> Trazer da extensão</button>
+      <button class="btn btn-primary" onclick="scEnviar()"><i class="ti ti-arrow-up"></i> Enviar para extensão</button>
+    </div>
+  </div>
+  <div id="sc-status" style="font-size:12px;margin-bottom:12px;min-height:18px"></div>
+  <div id="sc-pastas" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:11px"></div>
+  <div id="sc-corpo"></div>
 </div>
 </div>
 
