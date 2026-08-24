@@ -223,6 +223,8 @@ th.sort-desc::after{content:' ↓';color:var(--blue-4)}
     <i class="ti ti-cloud-download"></i> Carregar do Sheets
   </button>
 
+  <span id="sync-status" title="Estado da sincronização com o Google Sheets" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted);padding:0 8px;white-space:nowrap"></span>
+
   <button class="nav-btn primary" onclick="openModal()"><i class="ti ti-plus"></i> Novo lead</button>
 </nav>
 
@@ -1757,8 +1759,60 @@ function fecharAvisoTrava(){
   if(b) b.remove();
 }
 
+// Guarda o horário da última sincronização no chrome.storage, para o painel
+// da extensão poder mostrar "Planilha: há X min" dentro do WhatsApp.
+function avisarExtensao(){
+  try{
+    const carimbo=JSON.stringify({ts:Date.now(), total:leads.length});
+    if(typeof chrome!=='undefined'&&chrome.storage&&chrome.storage.local){
+      chrome.storage.local.set({'crm_last_sync':carimbo});
+    }
+    window.postMessage({type:'CRM_SAVE_SYNC', sync:carimbo},'*');
+  }catch(e){}
+}
+
+// ─── INDICADOR DE SINCRONIZAÇÃO ──────────────────────────────────────────────
+// O sync automático não mostrava NADA — nem sucesso, nem erro. Com 1.300+
+// leads o Google leva de 30 a 60 segundos, e nesse tempo parecia que o CRM
+// tinha parado de enviar. Este indicador tira a dúvida.
+let _syncEstado='ocioso', _syncQuando=null, _syncRelogio=null;
+
+function marcarSync(estado, detalhe){
+  _syncEstado=estado;
+  if(estado==='ok') _syncQuando=new Date();
+  desenharSync(detalhe);
+  clearInterval(_syncRelogio);
+  if(estado==='ok') _syncRelogio=setInterval(()=>desenharSync(),30000);
+}
+function horaCurta(d){
+  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+function desenharSync(detalhe){
+  const e=document.getElementById('sync-status');
+  if(!e) return;
+  if(_syncEstado==='enviando'){
+    e.innerHTML='<span style="color:#93c5fd">⟳ enviando para a planilha'+(detalhe?(' ('+detalhe+')'):'')+'…</span>';
+    e.style.cursor='default'; e.onclick=null;
+  } else if(_syncEstado==='ok'){
+    const min=_syncQuando?Math.floor((Date.now()-_syncQuando.getTime())/60000):0;
+    const quando = min<1 ? 'agora' : (min===1?'há 1 min':('há '+min+' min'));
+    e.innerHTML='<span style="color:#86efac">● planilha em dia</span> <span style="color:var(--text-muted)">'+quando+
+      (_syncQuando?(' · '+horaCurta(_syncQuando)):'')+'</span>';
+    e.style.cursor='default'; e.onclick=null;
+  } else if(_syncEstado==='erro'){
+    e.innerHTML='<span style="color:#fca5a5">● falha ao enviar'+(detalhe?(' — '+escHtml(detalhe)):'')+'</span> '+
+      '<span style="color:#93c5fd;text-decoration:underline;cursor:pointer">tentar de novo</span>';
+    e.style.cursor='pointer';
+    e.onclick=()=>syncToSheets(true);
+  } else {
+    e.innerHTML='';
+    e.style.cursor='default'; e.onclick=null;
+  }
+}
+
 function syncToSheets(showFeedback=true){
   if(!SHEETS_URL) return;
+  marcarSync('enviando', leads.length+' leads');
   showProgress('☁ Sincronizando '+leads.length+' leads...', 5);
   let pct=5;
   const anim=setInterval(()=>{
@@ -1843,6 +1897,8 @@ function syncToSheets(showFeedback=true){
     _lastSyncTime=new Date();
     if(d.ok){
       fecharAvisoTrava();  // sincronizou: o aviso não faz mais sentido
+      marcarSync('ok');
+      avisarExtensao();
       updateProgress('✅ '+d.total+' leads sincronizados!', 100);
       // Envia as ligações para a aba "Ligações" (acumula, não apaga)
       syncCallsToSheets();
@@ -1853,12 +1909,14 @@ function syncToSheets(showFeedback=true){
       }
     } else {
       hideProgress();
+      marcarSync('erro', d.error||'a planilha recusou');
       if(showFeedback) showToast('⚠ Erro no Sheets: '+(d.error||''));
     }
   })
   .catch(e=>{ clearInterval(anim); hideProgress();
     // As travas de segurança já avisaram o usuário — não mostrar "Sheets offline"
-    if(e && String(e.message||'').startsWith('_trava_')) return;
+    if(e && String(e.message||'').startsWith('_trava_')){ marcarSync('ocioso'); return; }
+    marcarSync('erro', e.message||'sem conexão');
     if(showFeedback) showToast('⚠ Sheets offline: '+e.message); });
 }
 
