@@ -1771,6 +1771,18 @@ function avisarExtensao(){
   }catch(e){}
 }
 
+// Agenda o envio para a planilha quando a alteração veio da EXTENSÃO.
+// Espera 4s e reinicia a contagem a cada nova mensagem — assim, ao carimbar
+// vários leads seguidos no WhatsApp, envia uma vez só no fim, em vez de
+// disparar um envio da base inteira a cada lead.
+let _syncExtTimer=null;
+function agendarSyncExtensao(){
+  clearTimeout(_syncExtTimer);
+  _syncExtTimer=setTimeout(()=>{
+    if(typeof syncToSheets==='function') syncToSheets(false);
+  }, 4000);
+}
+
 // ─── INDICADOR DE SINCRONIZAÇÃO ──────────────────────────────────────────────
 // O sync automático não mostrava NADA — nem sucesso, nem erro. Com 1.300+
 // leads o Google leva de 30 a 60 segundos, e nesse tempo parecia que o CRM
@@ -2922,6 +2934,11 @@ window.addEventListener('message', e => {
         }
       }
       showToast('🔄 CRM atualizado pela extensão!');
+      // BUG CORRIGIDO 24/08: o CRM recebia da extensão, guardava no navegador e
+      // redesenhava — mas NUNCA enviava para a planilha. Só sincronizava quando
+      // a alteração era feita dentro do próprio CRM (que passa por save()).
+      // Resultado: lead cadastrado no WhatsApp nunca chegava ao Sheets.
+      agendarSyncExtensao();
     }catch(e2){}
   }
   if(e.data.type === 'CRM_BRIDGE_READY') {
