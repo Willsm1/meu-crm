@@ -1586,26 +1586,58 @@ function scSalvar(){ try{ localStorage.setItem('crm_textos_crm',JSON.stringify(s
 function scQtd(p){ return scDados.itens.filter(x=>x.p===p).length; }
 
 // Manda para a extensão pela ponte
+// Envio dos textos rápidos para a extensão.
+// A confirmação NÃO é mais otimista: o bridge responde CRM_TEXTOS_SALVOS
+// (bridge.js:52) e só então a tela mostra sucesso. Sem resposta em 2,5s,
+// avisa que a extensão não confirmou.
+let _scEnvioTimer=null, _scEnvioPend=false;
 function scEnviar(){
+  if(_scEnvioPend) return;
   if(!scDados.itens.length && !confirm('Enviar uma lista VAZIA vai apagar os textos da extensão. Continuar?')) return;
+  _scEnvioPend=true;
+  scMsg='Enviando para extensão…';
+  renderScript();
+  // payload idêntico ao anterior — o contrato com o bridge não muda
   window.postMessage({type:'CRM_SAVE_TEXTOS', textos:JSON.stringify({
     itens:scDados.itens, pastas:scDados.pastas, atual:SC_GERAL
   })},'*');
-  scMsg='Enviado: '+scDados.itens.length+' textos em '+scDados.pastas.length+' pastas';
+  clearTimeout(_scEnvioTimer);
+  _scEnvioTimer=setTimeout(()=>{
+    if(!_scEnvioPend) return;
+    _scEnvioPend=false;
+    scMsg='⚠ A extensão não confirmou o salvamento. Abra o WhatsApp Web numa aba e tente de novo.';
+    renderScript();
+  },2500);
+}
+function scEnvioConfirmado(ok,erro){
+  if(!_scEnvioPend) return;
+  clearTimeout(_scEnvioTimer);
+  _scEnvioPend=false;
+  scMsg = ok
+    ? ('✓ Sincronizado com a extensão · '+scDados.itens.length+' textos em '+scDados.pastas.length+' pastas')
+    : ('✕ Falha ao salvar na extensão'+(erro?(': '+erro):''));
   renderScript();
 }
+// Busca dos textos na extensão.
+// scExt é ZERADO antes de pedir: sem isso, uma resposta de uma chamada
+// anterior passava no teste scExt===null e o CRM tratava dado velho como novo.
+let _scLoadPend=false;
 function scPuxar(){
+  if(_scLoadPend) return;
+  _scLoadPend=true;
+  scExt=null;                       // descarta qualquer resposta anterior
   window.postMessage({type:'CRM_LOAD'},'*');
-  scMsg='Pedindo os textos da extensão...';
+  scMsg='Pedindo os textos da extensão…';
   renderScript();
   setTimeout(()=>{
-    if(scExt===null){ scMsg='A extensão não respondeu. Abra o WhatsApp Web numa aba.'; renderScript(); return; }
+    _scLoadPend=false;
+    if(scExt===null){ scMsg='⚠ A extensão não respondeu. Abra o WhatsApp Web numa aba.'; renderScript(); return; }
     scDados=scNormalizar(scExt);
     if(scPasta && scDados.pastas.indexOf(scPasta)<0) scPasta=SC_GERAL;
     scSalvar();
-    scMsg='Trazido da extensão: '+scDados.itens.length+' textos';
+    scMsg='✓ Trazido da extensão: '+scDados.itens.length+' textos em '+scDados.pastas.length+' pastas';
     renderScript();
-  },700);
+  },1200);
 }
 
 function renderScript(){
@@ -3261,7 +3293,14 @@ window.addEventListener('message', e => {
     }catch(er){}
   }
   if(e.data.type === 'CRM_SAVED') {
-    // Confirmação de que o bridge gravou no chrome.storage
+    // Confirmação de que o bridge gravou os LEADS no chrome.storage
+  }
+  // ACK específico dos textos rápidos — emitido por bridge.js:52.
+  // Existia na extensão desde sempre; o CRM é que nunca escutava.
+  if(e.data.type === 'CRM_TEXTOS_SALVOS') {
+    if(typeof scEnvioConfirmado==='function'){
+      scEnvioConfirmado(e.data.ok===true, e.data.erro);
+    }
   }
 });
 
