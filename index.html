@@ -3834,5 +3834,284 @@ function blEnviarAoSheets(bl){
 </div>
 </div>
 
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     CAMADA SUPABASE / SHADOW — V1 CANDIDATA
+     Bloco ISOLADO. Nao altera nenhuma funcao existente do CRM.
+     Fonte da verdade continua sendo localStorage + chrome.storage + Sheets.
+     Nenhuma chamada e feita automaticamente sem flag e sem chave.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+'use strict';
+
+/* ─── CONFIGURACAO — unico ponto ──────────────────────────────────────────
+   SOMENTE chave publicavel. NUNCA service_role, secret, senha ou JWT fixo.
+   publishableKey preenchida com a chave PUBLICAVEL do projeto.
+   Nenhuma credencial administrativa e usada no frontend.                    */
+const SUPABASE_CONFIG = {
+  projectRef:     'dbnjlvnkmgbiknhbefys',
+  url:            'https://dbnjlvnkmgbiknhbefys.supabase.co',
+  publishableKey: 'sb_publishable_QBqpxI45woFRKDLTIa0EYw_CjwaIz81', // chave PUBLICAVEL
+                               //    permitida no frontend; sem privilegio administrativo.
+                               //    NUNCA service_role, secret, senha ou JWT fixo.
+  schema:         'crm'
+};
+
+/* ─── FEATURE FLAGS ─────────────────────────────────────────────────────── */
+const CRM_SUPABASE_SHADOW          = true;   // camada existe
+const CRM_SUPABASE_SOURCE_OF_TRUTH = false;  // OBRIGATORIO false nesta V1
+const CRM_FOLLOWUP_ENABLED         = false;  // OBRIGATORIO false nesta V1
+const CRM_SUPABASE_ALLOW_WRITE     = false;  // trava anti-migracao acidental
+
+/* ─── ESTADO INTERNO ────────────────────────────────────────────────────── */
+const _sbState = {
+  configurado: false, sessao: null, ultimoErro: null,
+  healthOk: null, verificadoEm: null
+};
+
+function _sbPronto(){
+  return CRM_SUPABASE_SHADOW
+      && !!SUPABASE_CONFIG.url
+      && !!SUPABASE_CONFIG.publishableKey;
+}
+
+function _sbHeaders(){
+  const h = {
+    'apikey': SUPABASE_CONFIG.publishableKey,
+    'Accept-Profile':  SUPABASE_CONFIG.schema,
+    'Content-Profile': SUPABASE_CONFIG.schema,
+    'Content-Type': 'application/json'
+  };
+  const tok = _sbState.sessao && _sbState.sessao.access_token;
+  h['Authorization'] = 'Bearer ' + (tok || SUPABASE_CONFIG.publishableKey);
+  return h;
+}
+
+/* Timeout curto: Supabase indisponivel nunca pode travar o CRM. */
+function _sbFetch(caminho, opcoes, ms){
+  const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  const t = setTimeout(function(){ if(ctl) ctl.abort(); }, ms || 6000);
+  const o = Object.assign({ headers: _sbHeaders() }, opcoes || {});
+  if(ctl) o.signal = ctl.signal;
+  return fetch(SUPABASE_CONFIG.url + caminho, o)
+    .then(function(r){ clearTimeout(t); return r; })
+    .catch(function(e){ clearTimeout(t); throw e; });
+}
+
+/* ─── INIT ──────────────────────────────────────────────────────────────── */
+function supabaseInit(){
+  _sbState.configurado = _sbPronto();
+  _sbState.verificadoEm = new Date().toISOString();
+  if(!_sbState.configurado){
+    _sbState.ultimoErro = SUPABASE_CONFIG.publishableKey
+      ? 'shadow desligado' : 'publishableKey ausente';
+  }
+  return {
+    configurado: _sbState.configurado,
+    shadow: CRM_SUPABASE_SHADOW,
+    sourceOfTruth: CRM_SUPABASE_SOURCE_OF_TRUTH,
+    followup: CRM_FOLLOWUP_ENABLED,
+    escritaLiberada: CRM_SUPABASE_ALLOW_WRITE,
+    motivo: _sbState.ultimoErro
+  };
+}
+
+/* ─── SESSAO — MECANISMO PROVISORIO ──────────────────────────────────────
+   ATENCAO: ler 'sb-<projectRef>-auth-token' do localStorage NAO e a
+   arquitetura definitiva de autenticacao. E leitura oportunista do formato
+   que o Supabase Auth grava hoje, usada apenas como PREPARACAO da camada.
+
+   NAO tratar a existencia dessa chave como login implementado.
+   NAO construir fluxo de permissao em cima dela.
+   O formato pode mudar entre versoes do Supabase sem aviso.
+
+   A autenticacao definitiva do CRM e da extensao sera feita em fase
+   propria, usando a MESMA identidade Supabase Auth por executivo.
+   Ate la esta funcao serve so para responder: ha sessao? ha erro?        */
+function supabaseGetSession(){
+  if(!_sbPronto()) return Promise.resolve({ok:false, motivo:'nao configurado', sessao:null});
+  let bruto = null;
+  try{
+    const chave = 'sb-' + SUPABASE_CONFIG.projectRef + '-auth-token';
+    bruto = localStorage.getItem(chave);
+  }catch(e){ return Promise.resolve({ok:false, motivo:'localStorage indisponivel', sessao:null}); }
+  if(!bruto) return Promise.resolve({ok:false, motivo:'sem sessao', sessao:null});
+  let s = null;
+  try{ s = JSON.parse(bruto); }catch(e){
+    return Promise.resolve({ok:false, motivo:'sessao ilegivel', sessao:null});
+  }
+  const tok = s && (s.access_token || (s.currentSession && s.currentSession.access_token));
+  if(!tok) return Promise.resolve({ok:false, motivo:'sessao sem token', sessao:null});
+  _sbState.sessao = { access_token: tok };
+  return _sbFetch('/auth/v1/user', {method:'GET'})
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(u){
+      if(!u || !u.id){ _sbState.sessao=null;
+        return {ok:false, motivo:'token invalido', sessao:null}; }
+      _sbState.sessao.user = {id:u.id, email:u.email};
+      return {ok:true, motivo:null, sessao:_sbState.sessao};
+    })
+    .catch(function(e){
+      _sbState.ultimoErro = String(e && e.message || e);
+      return {ok:false, motivo:'falha de rede', sessao:null};
+    });
+}
+
+/* ─── HEALTH CHECK ──────────────────────────────────────────────────────
+   Somente leitura. Nenhuma escrita e feita para testar disponibilidade.
+
+   Tres dimensoes SEPARADAS, porque 401/403/404 nao sao "saudavel":
+     redeOk        a requisicao chegou e voltou (qualquer status HTTP)
+     apiUtilizavel a resposta foi de SUCESSO (2xx) — API realmente usavel
+     erroHttp      status quando houve resposta mas nao foi sucesso
+
+   ok:true SOMENTE quando a resposta esperada foi bem-sucedida.            */
+function supabaseHealthCheck(){
+  if(!_sbPronto()){
+    _sbState.healthOk = null;
+    return Promise.resolve({ok:false, redeOk:null, apiUtilizavel:false,
+                            status:null, erroHttp:null, motivo:'nao configurado'});
+  }
+  return _sbFetch('/rest/v1/', {method:'GET'}, 5000)
+    .then(function(r){
+      const sucesso = (r.status >= 200 && r.status < 300);
+      _sbState.healthOk = sucesso;
+      _sbState.verificadoEm = new Date().toISOString();
+      let motivo = null;
+      if(!sucesso){
+        if(r.status === 401 || r.status === 403) motivo = 'chave ou permissao invalida';
+        else if(r.status === 404)                motivo = 'schema nao exposto na Data API';
+        else if(r.status >= 500)                 motivo = 'erro do servidor';
+        else                                     motivo = 'resposta inesperada';
+        _sbState.ultimoErro = 'http ' + r.status + ' — ' + motivo;
+      }
+      return {ok: sucesso, redeOk: true, apiUtilizavel: sucesso,
+              status: r.status, erroHttp: sucesso ? null : r.status, motivo: motivo};
+    })
+    .catch(function(e){
+      _sbState.healthOk = false;
+      _sbState.ultimoErro = String(e && e.message || e);
+      return {ok:false, redeOk:false, apiUtilizavel:false,
+              status:null, erroHttp:null, motivo:'rede indisponivel'};
+    });
+}
+
+/* ─── LEITURA SHADOW — somente conferencia, nunca alimenta a UI ─────────── */
+function supabaseShadowRead(limite){
+  if(!_sbPronto()) return Promise.resolve({ok:false, motivo:'nao configurado', linhas:[]});
+  if(CRM_SUPABASE_SOURCE_OF_TRUTH){
+    return Promise.resolve({ok:false, motivo:'source of truth deve ser false nesta versao', linhas:[]});
+  }
+  const n = Math.min(Math.max(parseInt(limite,10)||50, 1), 200);
+  const cols = 'id,legacy_id,nome,telefone,status,valor,regiao,perfil,ult_meu,ult_dele,updated_at';
+  return _sbFetch('/rest/v1/leads?select=' + cols + '&deleted_at=is.null&limit=' + n, {method:'GET'})
+    .then(function(r){
+      if(!r.ok) return {ok:false, motivo:'http ' + r.status, linhas:[]};
+      return r.json().then(function(j){ return {ok:true, linhas:Array.isArray(j)?j:[]}; });
+    })
+    .catch(function(e){
+      _sbState.ultimoErro = String(e && e.message || e);
+      return {ok:false, motivo:'falha de rede', linhas:[]};
+    });
+}
+
+/* ─── NORMALIZACAO DO PAYLOAD ───────────────────────────────────────────
+   Mapeia SOMENTE campos com correspondencia CERTA no schema auditado.
+   Campo sem mapeamento seguro NAO e enviado e NAO e inventado.
+   Campos derivados pelo banco (ult_meu, ult_dele, is_critical, organization_id,
+   created_by, telefone_e164) ficam de fora de proposito.                    */
+function supabaseNormalizarLead(lead){
+  if(!lead) return {ok:false, motivo:'lead vazio', payload:null};
+  const id = (lead.id === undefined || lead.id === null) ? '' : String(lead.id).trim();
+  if(!id) return {ok:false, motivo:'lead sem id local', payload:null};
+  const nome = String(lead.nome || '').trim();
+  if(!nome) return {ok:false, motivo:'lead sem nome', payload:null};
+
+  const p = { legacy_id: id, nome: nome };
+  if(lead.empresa)  p.empresa  = String(lead.empresa);
+  if(lead.email)    p.email    = String(lead.email);
+  if(lead.telefone) p.telefone = String(lead.telefone);
+  if(lead.regiao)   p.regiao   = String(lead.regiao);
+  if(lead.origem)   p.origem   = String(lead.origem);
+
+  // 'Critico' NAO e status comercial no banco canonico: rejeita, nao converte.
+  if(lead.status){
+    if(String(lead.status).indexOf('Crítico') === 0){
+      return {ok:false, motivo:'status Critico nao e status comercial no banco', payload:null};
+    }
+    p.status = String(lead.status);
+  }
+  // perfil aceita apenas os dois valores do enum
+  if(lead.perfil === 'Moradia' || lead.perfil === 'Investimento') p.perfil = lead.perfil;
+
+  // valor: vazio permanece vazio, nunca vira 0
+  if(typeof valorNum === 'function'){
+    const v = valorNum(lead.valor);
+    if(v) p.valor = v;
+  }
+  // data_entrada so em ISO AAAA-MM-DD
+  if(lead.data && /^\d{4}-\d{2}-\d{2}$/.test(String(lead.data))) p.data_entrada = String(lead.data);
+
+  return {ok:true, motivo:null, payload:p};
+}
+
+/* ─── ESCRITA SHADOW — NAO IMPLEMENTADA NESTA V1 ─────────────────────────
+   Stub deliberado. NAO faz POST, NAO faz INSERT, NAO chama RPC.
+
+   Motivo (banco real conferido):
+     · 'authenticated' NAO possui INSERT direto em crm.leads;
+     · organization_id e obrigatorio e deriva da sessao;
+     · o caminho canonico de criacao e a RPC crm.create_lead(), que cria
+       lead + lead_assignment na mesma transacao.
+
+   crm.create_lead() sera avaliada separadamente para leads NOVOS.
+   A migracao historica tera fluxo proprio.
+   Nenhuma das duas e implementada aqui.
+
+   supabaseNormalizarLead() permanece disponivel para inspecionar o payload
+   sem enviar nada a lugar algum.                                          */
+function supabaseShadowWriteLead(lead){
+  return Promise.resolve({
+    ok: false,
+    gravado: false,
+    motivo: 'escrita ainda não implementada — requer API/RPC auditada'
+  });
+}
+
+/* ─── DIAGNOSTICO ───────────────────────────────────────────────────────── */
+function supabaseStatus(){
+  return {
+    config: {url:SUPABASE_CONFIG.url, schema:SUPABASE_CONFIG.schema,
+             temChave: !!SUPABASE_CONFIG.publishableKey},
+    flags: {shadow:CRM_SUPABASE_SHADOW, sourceOfTruth:CRM_SUPABASE_SOURCE_OF_TRUTH,
+            followup:CRM_FOLLOWUP_ENABLED, escrita:CRM_SUPABASE_ALLOW_WRITE},
+    estado: {configurado:_sbState.configurado, temSessao:!!_sbState.sessao,
+             health:_sbState.healthOk, verificadoEm:_sbState.verificadoEm,
+             ultimoErro:_sbState.ultimoErro}
+  };
+}
+
+/* ─── EXPOSICAO — namespace proprio, sem poluir o escopo do CRM ─────────── */
+try{
+  window.CRM_SUPABASE = {
+    init: supabaseInit,
+    getSession: supabaseGetSession,
+    healthCheck: supabaseHealthCheck,
+    shadowRead: supabaseShadowRead,
+    shadowWriteLead: supabaseShadowWriteLead,
+    normalizarLead: supabaseNormalizarLead,
+    status: supabaseStatus,
+    config: SUPABASE_CONFIG
+  };
+  // init e local e sincrono: nao faz rede, nao pode falhar por indisponibilidade
+  supabaseInit();
+}catch(e){
+  try{ console.warn('[CRM_SUPABASE] camada inerte:', e && e.message); }catch(_){}
+}
+
+})();
+</script>
+
 </body>
 </html>
