@@ -4113,5 +4113,323 @@ try{
 })();
 </script>
 
+<!-- ═══════════════════════════════════════════════════════════════════════
+     AUTH SMOKE TEST — V1.3
+     Bloco ISOLADO. Nao altera nenhuma funcao existente do CRM.
+     Fonte da verdade continua localStorage + chrome.storage + Sheets.
+
+     SEGURO POR PADRAO: CRM_AUTH_REQUIRED = false e a tela so aparece com
+     ?auth=1 na URL. Sem isso o CRM se comporta exatamente como a V1.2,
+     mesmo que este arquivo va parar na main por engano.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+'use strict';
+
+/* ─── MODO SEGURO ─────────────────────────────────────────────────────── */
+const CRM_AUTH_REQUIRED = false;   // NAO mudar nesta versao
+
+function _authPedido(){
+  try{ return new URLSearchParams(window.location.search).get('auth') === '1'; }
+  catch(e){ return false; }
+}
+
+/* ─── CLIENTE ISOLADO ─────────────────────────────────────────────────── */
+const _cfg = (window.CRM_SUPABASE && window.CRM_SUPABASE.config) || null;
+let _cli = null, _erroSdk = null;
+
+function _criarCliente(){
+  if(_cli) return _cli;
+  if(!_cfg || !_cfg.url || !_cfg.publishableKey){
+    _erroSdk = 'configuracao Supabase ausente'; return null;
+  }
+  const sb = window.supabase;
+  if(!sb || typeof sb.createClient !== 'function'){
+    _erroSdk = 'SDK nao carregado (window.supabase.createClient ausente)'; return null;
+  }
+  try{
+    // storageKey NAO e customizado: usa o padrao sb-<projectRef>-auth-token,
+    // que a camada shadow da V1.2 ja reconhece.
+    _cli = sb.createClient(_cfg.url, _cfg.publishableKey, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+      db:   { schema: _cfg.schema || 'crm' }
+    });
+    window.TM_SUPABASE_AUTH_CLIENT = _cli;
+    _erroSdk = null;
+    return _cli;
+  }catch(e){ _erroSdk = String(e && e.message || e); return null; }
+}
+
+/* ─── TRADUCAO DE ERRO ────────────────────────────────────────────────── */
+function _traduzErro(e){
+  if(!e) return 'erro desconhecido';
+  const m = String(e.message || e.error_description || e).toLowerCase();
+  const st = e.status || e.code || null;
+  if(m.indexOf('invalid login') >= 0 || m.indexOf('invalid credentials') >= 0)
+    return 'credenciais invalidas';
+  if(m.indexOf('email not confirmed') >= 0)  return 'e-mail nao confirmado';
+  if(m.indexOf('user not found') >= 0)       return 'usuario inexistente';
+  if(m.indexOf('user is banned') >= 0 || m.indexOf('disabled') >= 0)
+    return 'usuario inativo';
+  if(m.indexOf('jwt') >= 0 || m.indexOf('expired') >= 0) return 'sessao expirada';
+  if(m.indexOf('failed to fetch') >= 0 || m.indexOf('networkerror') >= 0
+     || m.indexOf('load failed') >= 0)       return 'rede indisponivel';
+  if(st === 404 || m.indexOf('does not exist') >= 0 || m.indexOf('not exposed') >= 0
+     || m.indexOf('schema must be one of') >= 0)
+    return 'schema crm nao exposto na Data API';
+  if(m.indexOf('row-level security') >= 0 || m.indexOf('rls') >= 0)
+    return 'bloqueado por RLS';
+  if(m.indexOf('pgrst') >= 0 || (e.code && String(e.code).indexOf('PGRST') === 0))
+    return 'erro PostgREST: ' + (e.code || '');
+  if(st === 401 || st === 403) return 'chave ou permissao invalida';
+  return String(e.message || e);
+}
+
+/* ─── SESSAO — RESTAURADA PRECISA SER VALIDADA ───────────────────────────
+   getSession() apenas LE o que esta no storage: devolve token expirado,
+   revogado ou adulterado sem reclamar. Por isso a sessao so e considerada
+   valida depois que getUser() confirma a identidade CONTRA O SERVIDOR.
+
+   Ordem: getSession -> existe? -> getUser -> sem erro + user + user.id
+   Falhou qualquer etapa: NAO mostra "Autenticado" e o formulario continua.
+   Nao le profiles. Nao usa full_name.                                      */
+function authGetSession(){
+  const c = _criarCliente();
+  if(!c) return Promise.resolve({ok:false, motivo:_erroSdk, sessao:null});
+  return c.auth.getSession()
+    .then(function(r){
+      if(r.error) return {ok:false, motivo:_traduzErro(r.error), sessao:null};
+      const s = r.data && r.data.session;
+      if(!s) return {ok:false, motivo:'sem sessao', sessao:null};
+      // sessao existe no storage; confirmar com o servidor antes de confiar
+      return c.auth.getUser().then(function(g){
+        if(g.error) return {ok:false, motivo:_traduzErro(g.error), sessao:null};
+        const u = g.data && g.data.user;
+        if(!u)    return {ok:false, motivo:'sessao sem usuario', sessao:null};
+        if(!u.id) return {ok:false, motivo:'sessao sem identificador', sessao:null};
+        return {ok:true, motivo:null,
+                sessao:{email:u.email||null, userId:u.id}};
+      });
+    })
+    .catch(function(e){ return {ok:false, motivo:_traduzErro(e), sessao:null}; });
+}
+
+/* ─── LOGIN ───────────────────────────────────────────────────────────── */
+function authSignIn(email, password){
+  const c = _criarCliente();
+  if(!c) return Promise.resolve({ok:false, motivo:_erroSdk});
+  if(!email || !password) return Promise.resolve({ok:false, motivo:'informe e-mail e senha'});
+  return c.auth.signInWithPassword({ email: email, password: password })
+    .then(function(r){
+      if(r.error) return {ok:false, motivo:_traduzErro(r.error)};
+      const u = r.data && r.data.user;
+      if(!u || !u.id) return {ok:false, motivo:'sessao sem usuario'};
+      return {ok:true, motivo:null, email:u.email, userId:u.id};
+    })
+    .catch(function(e){ return {ok:false, motivo:_traduzErro(e)}; });
+}
+
+/* ─── LOGOUT — encerra SOMENTE a sessao DESTE navegador ──────────────────
+   scope:'local' e OBRIGATORIO. O padrao do SDK e 'global', que revogaria
+   TODAS as sessoes do mesmo executivo — extensao Chrome, outro navegador,
+   outro dispositivo. Sair do CRM nao pode derrubar a extensao no WhatsApp.  */
+function authSignOut(){
+  const c = _criarCliente();
+  if(!c) return Promise.resolve({ok:false, motivo:_erroSdk});
+  return c.auth.signOut({ scope: 'local' })
+    .then(function(r){
+      if(r && r.error) return {ok:false, motivo:_traduzErro(r.error)};
+      // NAO tocar em crm_leads, chrome.storage, Sheets, textos ou configuracoes
+      return {ok:true, motivo:null, escopo:'local'};
+    })
+    .catch(function(e){ return {ok:false, motivo:_traduzErro(e)}; });
+}
+
+/* ─── SMOKE TEST — somente diagnostico, NAO alimenta a interface ──────── */
+function authSmokeTest(){
+  const passos = [];
+  const c = _criarCliente();
+  if(!c) return Promise.resolve({ok:false, motivo:_erroSdk, passos:passos});
+
+  return c.auth.getSession()
+    .then(function(r){
+      const s = r.data && r.data.session;
+      passos.push({passo:'1 sessao', ok:!!s, detalhe: s ? 'presente' : 'ausente'});
+      if(!s) throw new Error('sem sessao');
+      return c.auth.getUser();
+    })
+    .then(function(r){
+      const u = r.data && r.data.user;
+      passos.push({passo:'2 getUser', ok:!!u, detalhe: u ? 'ok' : (r.error?_traduzErro(r.error):'sem user')});
+      passos.push({passo:'3 user.id', ok:!!(u&&u.id), detalhe:(u&&u.id)||'ausente'});
+      passos.push({passo:'4 email',   ok:!!(u&&u.email), detalhe:(u&&u.email)||'ausente'});
+      if(!window.CRM_SUPABASE) throw new Error('camada shadow ausente');
+      return window.CRM_SUPABASE.getSession();
+    })
+    .then(function(r){
+      passos.push({passo:'5 CRM_SUPABASE.getSession', ok:!!(r&&r.ok),
+                   detalhe:(r&&r.motivo)||'ok'});
+      return window.CRM_SUPABASE.shadowRead(1);
+    })
+    .then(function(r){
+      const n = (r && r.linhas) ? r.linhas.length : 0;
+      passos.push({passo:'6 shadowRead(1)', ok:!!(r&&r.ok),
+                   detalhe: r && r.ok ? (n + ' lead(s)') : ((r&&r.motivo)||'falhou')});
+      const todos = passos.every(function(p){ return p.ok; });
+      return {ok:todos, motivo:null, passos:passos, leadsVistos:n};
+    })
+    .catch(function(e){
+      return {ok:false, motivo:_traduzErro(e), passos:passos};
+    });
+}
+
+/* ─── OVERLAY — so existe quando ?auth=1 ──────────────────────────────── */
+const OV = 'tm-auth-overlay';
+
+function authClose(){
+  const el = document.getElementById(OV);
+  if(el) el.remove();
+}
+
+function _msg(txt, erro){
+  const m = document.getElementById('tm-auth-msg');
+  if(m){ m.textContent = txt || ''; m.style.color = erro ? '#fca5a5' : '#86efac'; }
+}
+
+function authOpen(){
+  if(document.getElementById(OV)) return;
+  const d = document.createElement('div');
+  d.id = OV;
+  d.style.cssText = 'position:fixed;inset:0;background:rgba(2,6,15,.86);z-index:99999;'
+    + 'display:flex;align-items:center;justify-content:center;padding:24px;'
+    + 'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif';
+  d.innerHTML =
+     '<div style="width:100%;max-width:340px;background:#0e1628;'
+    + 'border:1px solid rgba(59,130,246,.4);border-radius:12px;padding:22px">'
+    + '<div style="font-size:13px;font-weight:600;color:#60a5fa;margin-bottom:3px">Supabase Auth</div>'
+    + '<div style="font-size:10.5px;color:#4b5e78;margin-bottom:16px">'
+    + 'smoke test V1.3 &middot; o CRM continua usando os dados locais</div>'
+    + '<div id="tm-auth-logado" style="display:none;font-size:12px;color:#86efac;margin-bottom:14px"></div>'
+    + '<div id="tm-auth-form">'
+    +   '<label for="tm-auth-email" style="display:block;font-size:9px;letter-spacing:.08em;'
+    +   'text-transform:uppercase;color:#4b5e78;margin-bottom:4px">E-mail</label>'
+    +   '<input id="tm-auth-email" type="email" autocomplete="off" '
+    +   'style="width:100%;box-sizing:border-box;background:#080f1e;border:.5px solid rgba(59,130,246,.3);'
+    +   'border-radius:7px;color:#e2e8f0;font-size:12px;padding:8px 10px;outline:none;margin-bottom:10px">'
+    +   '<label for="tm-auth-pass" style="display:block;font-size:9px;letter-spacing:.08em;'
+    +   'text-transform:uppercase;color:#4b5e78;margin-bottom:4px">Senha</label>'
+    +   '<input id="tm-auth-pass" type="password" autocomplete="off" '
+    +   'style="width:100%;box-sizing:border-box;background:#080f1e;border:.5px solid rgba(59,130,246,.3);'
+    +   'border-radius:7px;color:#e2e8f0;font-size:12px;padding:8px 10px;outline:none;margin-bottom:12px">'
+    + '</div>'
+    + '<div id="tm-auth-msg" style="font-size:11px;min-height:16px;margin-bottom:10px"></div>'
+    + '<div style="display:flex;gap:8px;justify-content:flex-end">'
+    +   '<button id="tm-auth-fechar" style="background:transparent;border:.5px solid rgba(59,130,246,.25);'
+    +   'color:#4b5e78;border-radius:7px;padding:7px 14px;font-size:11px;cursor:pointer;'
+    +   'font-family:inherit">Fechar</button>'
+    +   '<button id="tm-auth-sair" style="display:none;background:transparent;'
+    +   'border:.5px solid rgba(248,113,113,.4);color:#fca5a5;border-radius:7px;padding:7px 14px;'
+    +   'font-size:11px;cursor:pointer;font-family:inherit">Sair</button>'
+    +   '<button id="tm-auth-entrar" style="background:var(--blue-2,#1d4ed8);border:none;color:#fff;'
+    +   'border-radius:7px;padding:7px 18px;font-size:11px;cursor:pointer;font-family:inherit;'
+    +   'font-weight:500">Entrar</button>'
+    + '</div></div>';
+  document.body.appendChild(d);
+
+  document.getElementById('tm-auth-fechar').addEventListener('click', authClose);
+
+  document.getElementById('tm-auth-entrar').addEventListener('click', function(){
+    const em = document.getElementById('tm-auth-email').value.trim();
+    const pw = document.getElementById('tm-auth-pass').value;
+    _msg('entrando...', false);
+    authSignIn(em, pw).then(function(r){
+      // a senha nunca e guardada em lugar algum
+      const cp = document.getElementById('tm-auth-pass'); if(cp) cp.value = '';
+      if(!r.ok){ _msg(r.motivo, true); return; }
+      _msg('autenticado', false);
+      _pintaLogado(r.email);
+      return authSmokeTest().then(function(t){
+        const l = t.leadsVistos === undefined ? '?' : t.leadsVistos;
+        _msg(t.ok ? ('smoke test ok · ' + l + ' lead(s) visiveis')
+                  : ('smoke test: ' + (t.motivo || 'incompleto')), !t.ok);
+        try{ console.table(t.passos); }catch(e){}
+      });
+    });
+  });
+
+  document.getElementById('tm-auth-sair').addEventListener('click', function(){
+    _msg('saindo...', false);
+    authSignOut().then(function(r){
+      if(!r.ok){ _msg(r.motivo, true); return; }
+      _pintaDeslogado();
+      _msg('sessao encerrada · dados locais intactos', false);
+    });
+  });
+
+  // se ja houver sessao valida, nao pedir senha
+  authGetSession().then(function(r){
+    if(r.ok && r.sessao) _pintaLogado(r.sessao.email);
+  });
+}
+
+function _pintaLogado(email){
+  const box = document.getElementById('tm-auth-logado');
+  const frm = document.getElementById('tm-auth-form');
+  const ent = document.getElementById('tm-auth-entrar');
+  const sai = document.getElementById('tm-auth-sair');
+  // identidade visual desta etapa: SOMENTE o e-mail. Sem full_name do profile.
+  if(box){ box.textContent = 'Autenticado: ' + (email || '—'); box.style.display = 'block'; }
+  if(frm) frm.style.display = 'none';
+  if(ent) ent.style.display = 'none';
+  if(sai) sai.style.display = 'inline-block';
+}
+
+function _pintaDeslogado(){
+  const box = document.getElementById('tm-auth-logado');
+  const frm = document.getElementById('tm-auth-form');
+  const ent = document.getElementById('tm-auth-entrar');
+  const sai = document.getElementById('tm-auth-sair');
+  if(box){ box.style.display = 'none'; box.textContent = ''; }
+  if(frm) frm.style.display = 'block';
+  if(ent) ent.style.display = 'inline-block';
+  if(sai) sai.style.display = 'none';
+  const e = document.getElementById('tm-auth-email'); if(e) e.value = '';
+  const p = document.getElementById('tm-auth-pass');  if(p) p.value = '';
+}
+
+/* ─── DIAGNOSTICO ─────────────────────────────────────────────────────── */
+function authStatus(){
+  return {
+    authRequired: CRM_AUTH_REQUIRED,
+    modoTeste: _authPedido(),
+    sdkCarregado: !!(window.supabase && typeof window.supabase.createClient === 'function'),
+    clienteCriado: !!_cli,
+    erroSdk: _erroSdk,
+    overlayAberto: !!document.getElementById(OV),
+    config: _cfg ? {url:_cfg.url, schema:_cfg.schema, temChave:!!_cfg.publishableKey} : null
+  };
+}
+
+/* ─── EXPOSICAO ───────────────────────────────────────────────────────── */
+try{
+  window.CRM_AUTH = {
+    status: authStatus, open: authOpen, close: authClose,
+    signIn: authSignIn, signOut: authSignOut,
+    getSession: authGetSession, smokeTest: authSmokeTest
+  };
+  // CRM_AUTH_REQUIRED continua false: a tela so abre por ?auth=1
+  if(_authPedido()){
+    if(document.readyState === 'loading')
+      document.addEventListener('DOMContentLoaded', function(){ try{ authOpen(); }catch(e){} });
+    else { try{ authOpen(); }catch(e){} }
+  }
+}catch(e){
+  try{ console.warn('[CRM_AUTH] camada inerte:', e && e.message); }catch(_){}
+}
+
+})();
+</script>
+
 </body>
 </html>
