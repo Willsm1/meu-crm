@@ -477,8 +477,8 @@ PARTE 1 — CSS
   <div class="toolbar">
     <div class="tb-grupo" style="flex:1;min-width:0"><span class="tb-label">Buscar</span>
       <div class="tb-campos">
-        <input type="text" id="search-leads" placeholder="Nome, empresa, email, telefone…" oninput="renderLeads()" style="flex:1;min-width:190px">
-        <input type="text" id="search-notas" oninput="searchNotas()" placeholder="Nas anotações…" style="width:180px">
+        <input type="text" id="search-leads" placeholder="Nome, empresa, email, telefone…" oninput="renderLeads()" style="flex:1;min-width:190px" autocomplete="off" data-lpignore="true" name="search-leads-nofill">
+        <input type="text" id="search-notas" oninput="searchNotas()" placeholder="Nas anotações…" style="width:180px" autocomplete="off" data-lpignore="true" name="search-notas-nofill">
       </div></div>
     <div class="tb-sep"></div>
     <div class="tb-grupo"><span class="tb-label">Filtrar</span>
@@ -490,7 +490,7 @@ PARTE 1 — CSS
           <option>Perdido</option><option>Gold ⭐</option><option>Manter Atualizado</option>
           <option>Pronto</option><option>Moradia</option><option>Crítico</option>
         </select>
-        <input type="text" id="search-regiao" placeholder="Região…" oninput="renderLeads()" style="width:128px">
+        <input type="text" id="search-regiao" placeholder="Região…" oninput="renderLeads()" style="width:128px" autocomplete="off" data-lpignore="true" name="search-regiao-nofill">
         <select id="filterPerfil" onchange="renderLeads()">
           <option value="">Todos os perfis</option><option>Moradia</option><option>Investimento</option>
         </select>
@@ -2000,9 +2000,21 @@ function fonteLocalPermitida(){ return _papelResolvido && _papel === 'admin'; }
 /* So avanca de desconhecido -> papel. Nunca sobrescreve um papel ja travado. */
 /* V1.4H: destrava para permitir troca de usuario SEM reload.
    So e chamada no logout/troca, nunca por falha de rede. */
+/* V1.4K: filtros NAO sao estado de sessao. Zerados em toda troca. */
+function _limparFiltros(){
+  ['search-leads','search-notas','search-regiao','fu-busca'].forEach(function(id){
+    try{ var e=document.getElementById(id); if(e) e.value=''; }catch(x){}
+  });
+  ['fu-prio','fu-resp'].forEach(function(id){
+    try{ var e=document.getElementById(id); if(e) e.value=''; }catch(x){}
+  });
+  try{ if(typeof filtroStatus!=='undefined') filtroStatus=''; }catch(x){}
+}
+
 function _resetarPapel(){
   _papelTravado=false; _papelResolvido=false; _papel=null;
   leads=[]; calls=[];
+  _limparFiltros();
   try{ scUid=null; scDados={pastas:[SC_GERAL],itens:[]}; scExt=null; }catch(e){}
   try{ if(window.CRM_SUPABASE && window.CRM_SUPABASE.limparFila)
          window.CRM_SUPABASE.limparFila(); }catch(e){}
@@ -2019,6 +2031,9 @@ function _definirPapel(p, motivo){
   _papel = p;
   _papelResolvido = true;
   if(p === 'admin' || p === 'executivo' || p === 'gerente') _papelTravado = true;
+  /* filtros comecam sempre vazios: nem o autofill do Chrome nem a sessao
+     anterior podem deixar texto num campo de busca. */
+  try{ if(typeof _limparFiltros==='function') _limparFiltros(); }catch(e){}
   /* o conjunto de scripts segue o usuario recem-identificado */
   try{ if(typeof scCarregar==='function'){ scCarregar();
         if(typeof renderScript==='function'
@@ -2130,6 +2145,15 @@ function load(){
   if(!_papelResolvido){
     leads = []; calls = [];
     resolverPapel().then(function(){ load(); });
+    return;
+  }
+
+  /* CONFLITO extensao x CRM: nada e carregado ate o usuario decidir. */
+  if(window.CRM_CTX && window.CRM_CTX.haConflito()){
+    leads=[]; calls=[];
+    try{ _limparFiltros(); }catch(e){}
+    renderAll();
+    try{ window.CRM_CTX.abrirConflito(); }catch(e){}
     return;
   }
 
@@ -4105,7 +4129,7 @@ function blEnviarAoSheets(bl){
         <option value="parado">Parados 7+ dias</option>
       </select>
       <input id="fu-busca" placeholder="Buscar nome..." oninput="fuRenderFila()"
-             style="height:34px;min-width:160px">
+             style="height:34px;min-width:160px" autocomplete="off" data-lpignore="true" name="fu-busca-nofill">
       <button class="btn" onclick="fuCarregar()"><i class="ti ti-refresh"></i> Atualizar</button>
     </div>
   </div>
@@ -4768,12 +4792,12 @@ function authOpen(){
     + '<div id="tm-auth-form">'
     +   '<label for="tm-auth-email" style="display:block;font-size:9px;letter-spacing:.08em;'
     +   'text-transform:uppercase;color:#4b5e78;margin-bottom:4px">E-mail</label>'
-    +   '<input id="tm-auth-email" type="email" autocomplete="off" '
+    +   '<input id="tm-auth-email" type="email" autocomplete="off" name="tm-login-email" '
     +   'style="width:100%;box-sizing:border-box;background:#080f1e;border:.5px solid rgba(59,130,246,.3);'
     +   'border-radius:7px;color:#e2e8f0;font-size:12px;padding:8px 10px;outline:none;margin-bottom:10px">'
     +   '<label for="tm-auth-pass" style="display:block;font-size:9px;letter-spacing:.08em;'
     +   'text-transform:uppercase;color:#4b5e78;margin-bottom:4px">Senha</label>'
-    +   '<input id="tm-auth-pass" type="password" autocomplete="off" '
+    +   '<input id="tm-auth-pass" type="password" autocomplete="new-password" name="tm-login-pass" '
     +   'style="width:100%;box-sizing:border-box;background:#080f1e;border:.5px solid rgba(59,130,246,.3);'
     +   'border-radius:7px;color:#e2e8f0;font-size:12px;padding:8px 10px;outline:none;margin-bottom:12px">'
     + '</div>'
@@ -5691,6 +5715,7 @@ function sessaoAposLogin(){
       try{ if(typeof scCarregar==='function') scCarregar(); }catch(e){}
       try{ if(typeof renderAll==='function') renderAll(); }catch(e){}
       sessaoPintar();
+      try{ if(window.CRM_CTX) window.CRM_CTX.validarAposLogin(); }catch(e){}
       try{ if(window.CRM_AUTH && window.CRM_AUTH.close) window.CRM_AUTH.close(); }catch(e){}
     });
   }
@@ -5835,6 +5860,132 @@ function abrirTrocarSenha(){
 try{
   window.abrirTrocarSenha = abrirTrocarSenha;
   window.fecharTrocarSenha = fecharTrocarSenha;
+}catch(e){}
+
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     CONFLITO DE SESSÃO — extensão x CRM
+     A extensão abre o CRM com ?ctx=<e-mail>. Isso é apenas um IDENTIFICADOR
+     DE CONTEXTO: não é token, não é senha, não autentica ninguém.
+     As sessões continuam independentes.
+
+     Se a sessão do CRM for de outra conta, NADA é carregado até o usuário
+     decidir. Nenhum dado do usuário anterior aparece durante a troca.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+'use strict';
+
+const OVC = 'tm-conflito-overlay';
+let _ctxEsperado = null;      // e-mail que a extensão informou
+let _conflitoAceito = false;  // usuário escolheu "Continuar como ..."
+
+function _lerCtx(){
+  try{
+    var v = new URLSearchParams(window.location.search).get('ctx');
+    return v ? String(v).trim().toLowerCase() : null;
+  }catch(e){ return null; }
+}
+
+function _emailSessao(){
+  try{
+    var c=(window.CRM_SUPABASE && window.CRM_SUPABASE.config);
+    if(!c) return null;
+    var b=localStorage.getItem('sb-'+c.projectRef+'-auth-token');
+    if(!b) return null;
+    var t=JSON.parse(b).access_token;
+    var p=JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+    return p.email ? String(p.email).toLowerCase() : null;
+  }catch(e){ return null; }
+}
+
+function haConflito(){
+  if(_conflitoAceito) return false;
+  if(!_ctxEsperado) return false;              // sem contexto: uso autonomo
+  var atual = _emailSessao();
+  if(!atual) return false;                     // sem sessao: o login normal assume
+  return atual !== _ctxEsperado;
+}
+
+function fecharConflito(){
+  var el=document.getElementById(OVC); if(el) el.remove();
+}
+
+function abrirConflito(){
+  if(document.getElementById(OVC)) return;
+  var atual = _emailSessao() || '—';
+  var nomeAtual = (typeof papelAtual==='function' && papelAtual() && papelAtual()!=='bloqueado')
+                ? ((document.getElementById('sessao-nome')||{}).textContent || atual) : atual;
+
+  var d=document.createElement('div');
+  d.id=OVC;
+  d.style.cssText='position:fixed;inset:0;background:rgba(2,6,15,.92);z-index:100000;'
+    + 'display:flex;align-items:center;justify-content:center;padding:24px;'
+    + "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
+  d.innerHTML =
+     '<div style="width:100%;max-width:400px;background:#0e1628;'
+    + 'border:1px solid rgba(252,211,77,.45);border-radius:12px;padding:22px">'
+    + '<div style="font-size:13px;font-weight:600;color:#fcd34d;margin-bottom:14px">'
+    + '⚠ Contas diferentes</div>'
+    + '<div style="font-size:12px;color:#94a3b8;line-height:1.6;margin-bottom:6px">'
+    + 'CRM está conectado como<br><span style="color:#e2e8f0;font-weight:600">'
+    + _esc(nomeAtual) + '</span><br><span style="font-size:10.5px;color:#4b5e78">'
+    + _esc(atual) + '</span></div>'
+    + '<div style="font-size:12px;color:#94a3b8;line-height:1.6;margin-bottom:16px">'
+    + 'Extensão está conectada como<br><span style="color:#e2e8f0;font-weight:600">'
+    + _esc(_ctxEsperado) + '</span></div>'
+    + '<div style="font-size:10.5px;color:#4b5e78;margin-bottom:14px">'
+    + 'Nenhum dado foi carregado até você escolher.</div>'
+    + '<button id="tm-cf-trocar" style="width:100%;padding:9px;margin-bottom:7px;'
+    + 'background:var(--blue-2,#1d4ed8);border:none;border-radius:8px;color:#fff;'
+    + 'font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">'
+    + 'Trocar conta</button>'
+    + '<button id="tm-cf-continuar" style="width:100%;padding:8px;background:transparent;'
+    + 'border:.5px solid rgba(59,130,246,.3);border-radius:8px;color:#94a3b8;'
+    + 'font-size:12px;cursor:pointer;font-family:inherit">Continuar como '
+    + _esc(nomeAtual) + '</button></div>';
+  document.body.appendChild(d);
+
+  document.getElementById('tm-cf-trocar').addEventListener('click', function(){
+    fecharConflito();
+    /* sair de verdade: encerra sessao, zera memoria e filtros, abre o login */
+    if(typeof sessaoSair==='function') sessaoSair();
+    else if(window.CRM_AUTH && window.CRM_AUTH.signOut) window.CRM_AUTH.signOut();
+  });
+  document.getElementById('tm-cf-continuar').addEventListener('click', function(){
+    _conflitoAceito = true;
+    fecharConflito();
+    /* so agora os dados podem ser carregados */
+    try{ if(typeof load==='function') load(); }catch(e){}
+  });
+}
+
+function _esc(s){
+  return String(s===null||s===undefined?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* Depois do login, confere se a conta bate com a esperada */
+function validarAposLogin(){
+  if(!_ctxEsperado){ _conflitoAceito=false; return; }
+  var atual=_emailSessao();
+  if(atual && atual === _ctxEsperado){ _conflitoAceito=false; fecharConflito(); }
+}
+
+_ctxEsperado = _lerCtx();
+
+try{
+  window.CRM_CTX = {
+    esperado: function(){ return _ctxEsperado; },
+    emailSessao: _emailSessao,
+    haConflito: haConflito,
+    abrirConflito: abrirConflito,
+    fecharConflito: fecharConflito,
+    validarAposLogin: validarAposLogin,
+    aceitar: function(){ _conflitoAceito = true; }
+  };
 }catch(e){}
 
 })();
