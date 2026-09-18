@@ -378,19 +378,30 @@ PARTE 1 — CSS
       style="display:flex;align-items:center;gap:7px;background:transparent;
              border:0.5px solid rgba(59,130,246,0.35);border-radius:9px;
              padding:5px 10px;cursor:pointer;font-family:inherit;color:#e2e8f0">
-      <span style="width:22px;height:22px;border-radius:50%;background:rgba(59,130,246,.22);
-                   display:flex;align-items:center;justify-content:center;font-size:10px;
-                   font-weight:700;color:#93c5fd" id="sessao-ini">–</span>
-      <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.15">
-        <span id="sessao-nome" style="font-size:11.5px;font-weight:600"></span>
-        <span id="sessao-papel" style="font-size:9.5px;color:#4b5e78;text-transform:uppercase;
-                                       letter-spacing:.06em"></span>
+      <span style="position:relative;display:inline-flex">
+        <span style="width:22px;height:22px;border-radius:50%;background:rgba(59,130,246,.22);
+                     display:flex;align-items:center;justify-content:center;font-size:10px;
+                     font-weight:700;color:#93c5fd" id="sessao-ini">–</span>
+        <span id="sessao-dot" title="sessao ativa"
+              style="position:absolute;right:-1px;bottom:-1px;width:7px;height:7px;border-radius:50%;
+                     background:#86efac;border:1.5px solid #0b1220"></span>
+      </span>
+      <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.2">
+        <span style="display:flex;align-items:center;gap:5px">
+          <span id="sessao-nome" style="font-size:11.5px;font-weight:600"></span>
+          <span id="sessao-papel" style="font-size:9px;color:#93c5fd;background:rgba(59,130,246,.18);
+                border-radius:8px;padding:1px 6px;letter-spacing:.03em"></span>
+        </span>
+        <span id="sessao-email" style="font-size:9.5px;color:#4b5e78"></span>
       </span>
       <i class="ti ti-chevron-down" style="font-size:12px;color:#4b5e78"></i>
     </button>
     <div id="sessao-menu" style="display:none;position:absolute;right:0;top:40px;z-index:70;
          background:var(--bg-card);border:0.5px solid rgba(59,130,246,0.35);border-radius:10px;
          padding:6px;min-width:190px;box-shadow:0 10px 30px rgba(0,0,0,.6)">
+      <button onclick="abrirTrocarSenha()" style="width:100%;text-align:left;background:transparent;
+        border:none;color:#e2e8f0;padding:8px 10px;border-radius:7px;cursor:pointer;
+        font-size:12px;font-family:inherit"><i class="ti ti-key"></i> Trocar senha</button>
       <button onclick="sessaoTrocar()" style="width:100%;text-align:left;background:transparent;
         border:none;color:#e2e8f0;padding:8px 10px;border-radius:7px;cursor:pointer;
         font-size:12px;font-family:inherit"><i class="ti ti-users"></i> Trocar usuario</button>
@@ -4780,7 +4791,13 @@ function authOpen(){
     + '</div></div>';
   document.body.appendChild(d);
 
-  document.getElementById('tm-auth-fechar').addEventListener('click', authClose);
+  /* sem sessao nao ha o que ver atras do login: o Fechar so vale se ja houver
+     papel resolvido e valido. Caso contrario, o CRM ficaria vazio e mudo. */
+  document.getElementById('tm-auth-fechar').addEventListener('click', function(){
+    var p = (typeof papelAtual==='function') ? papelAtual() : null;
+    if(p && p!=='bloqueado'){ authClose(); return; }
+    _msg('faca login para usar o CRM', true);
+  });
 
   document.getElementById('tm-auth-entrar').addEventListener('click', function(){
     const em = document.getElementById('tm-auth-email').value.trim();
@@ -4864,6 +4881,9 @@ try{
     getSession: authGetSession, smokeTest: authSmokeTest
   };
   // CRM_AUTH_REQUIRED continua false: a tela so abre por ?auth=1
+  /* O crm.html e autonomo: sem sessao valida, o login aparece sozinho.
+     Quem decide e sessaoPintar(), depois de resolverPapel().
+     ?auth=1 continua funcionando para abrir o login manualmente. */
   if(_authPedido()){
     if(document.readyState === 'loading')
       document.addEventListener('DOMContentLoaded', function(){ try{ authOpen(); }catch(e){} });
@@ -5579,14 +5599,31 @@ function sessaoPintar(){
   var papel = (typeof papelAtual==='function') ? papelAtual() : null;
   var resolvido = (typeof _papelResolvido!=='undefined') ? _papelResolvido : false;
 
-  /* sem papel util: esconde o badge e deixa o overlay assumir */
-  if(!resolvido || !papel || papel==='bloqueado'){
+  /* ainda resolvendo: nao mostra badge nem login. Nunca assumir papel antes
+     de getSession()/getUser() responderem. */
+  if(!resolvido){ box.style.display='none'; return; }
+
+  /* SEM SESSAO -> o CRM nao abre. Tela de login, sempre.
+     Isto torna o crm.html autonomo: nao depende da extensao. */
+  if(!papel || papel==='bloqueado'){
     box.style.display='none';
+    try{
+      if(window.CRM_AUTH && window.CRM_AUTH.open && !document.getElementById('tm-auth-overlay'))
+        window.CRM_AUTH.open();
+    }catch(e){}
     return;
   }
+
+  /* com sessao: fecha o login se estiver aberto */
+  try{
+    if(window.CRM_AUTH && window.CRM_AUTH.close && document.getElementById('tm-auth-overlay'))
+      window.CRM_AUTH.close();
+  }catch(e){}
+
   box.style.display='block';
+  var PAPEL_ROTULO={admin:'Admin', gerente:'Gerente', executivo:'Executivo'};
   var elP=document.getElementById('sessao-papel');
-  if(elP) elP.textContent=papel;
+  if(elP) elP.textContent = PAPEL_ROTULO[papel] || papel;
 
   function aplicarNome(n){
     _nomeCache = n || _nomeCache;
@@ -5599,6 +5636,17 @@ function sessaoPintar(){
       elI.textContent = ((p[0]||'?')[0] + (p.length>1?(p[p.length-1][0]):'')).toUpperCase();
     }
   }
+  var elE=document.getElementById('sessao-email');
+  if(elE){
+    var em=null;
+    try{
+      var c=_cfg(), b=c && localStorage.getItem('sb-'+c.projectRef+'-auth-token');
+      if(b){ var t=JSON.parse(b).access_token;
+             em=JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).email; }
+    }catch(e){}
+    elE.textContent = em || '';
+  }
+
   if(_nomeCache) aplicarNome(_nomeCache);
   else _buscarNome().then(aplicarNome);
 }
@@ -5664,6 +5712,129 @@ try{
   window.sessaoMenu=sessaoMenu; window.sessaoSair=sessaoSair;
   window.sessaoTrocar=sessaoTrocar; window.sessaoPintar=sessaoPintar;
   window.sessaoAposLogin=sessaoAposLogin;
+}catch(e){}
+
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     TROCAR SENHA — usa a SESSAO Supabase ja autenticada.
+     Nao ha fluxo paralelo: chama PUT /auth/v1/user, o mesmo endpoint
+     oficial. Nenhuma senha e gravada no CRM, em tabela ou em log.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+'use strict';
+
+const OV = 'tm-senha-overlay';
+
+function _cfg(){ return (window.CRM_SUPABASE && window.CRM_SUPABASE.config) || null; }
+function _tok(){
+  var c=_cfg(); if(!c) return null;
+  try{
+    var b=localStorage.getItem('sb-'+c.projectRef+'-auth-token');
+    if(!b) return null;
+    var s=JSON.parse(b);
+    return s && (s.access_token || (s.currentSession && s.currentSession.access_token));
+  }catch(e){ return null; }
+}
+
+function fecharTrocarSenha(){
+  var el=document.getElementById(OV); if(el) el.remove();
+}
+
+function abrirTrocarSenha(){
+  try{ var m=document.getElementById('sessao-menu'); if(m) m.style.display='none'; }catch(e){}
+  if(document.getElementById(OV)) return;
+
+  if(!_tok()){
+    alert('Faça login antes de trocar a senha.');
+    return;
+  }
+
+  var d=document.createElement('div');
+  d.id=OV;
+  d.style.cssText='position:fixed;inset:0;background:rgba(2,6,15,.86);z-index:99999;'
+    + 'display:flex;align-items:center;justify-content:center;padding:24px;'
+    + "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
+  d.innerHTML =
+     '<div style="width:100%;max-width:340px;background:#0e1628;'
+    + 'border:1px solid rgba(59,130,246,.4);border-radius:12px;padding:22px">'
+    + '<div style="font-size:13px;font-weight:600;color:#60a5fa;margin-bottom:3px">Trocar senha</div>'
+    + '<div style="font-size:10.5px;color:#4b5e78;margin-bottom:16px">'
+    + 'a nova senha vale para o CRM e para a extensão</div>'
+    + '<label style="display:block;font-size:9px;letter-spacing:.08em;text-transform:uppercase;'
+    + 'color:#4b5e78;margin-bottom:4px">Nova senha</label>'
+    + '<input id="tm-s1" type="password" autocomplete="new-password" '
+    + 'style="width:100%;box-sizing:border-box;background:#080f1e;border:.5px solid rgba(59,130,246,.3);'
+    + 'border-radius:7px;color:#e2e8f0;font-size:12px;padding:8px 10px;outline:none;margin-bottom:10px">'
+    + '<label style="display:block;font-size:9px;letter-spacing:.08em;text-transform:uppercase;'
+    + 'color:#4b5e78;margin-bottom:4px">Repita a nova senha</label>'
+    + '<input id="tm-s2" type="password" autocomplete="new-password" '
+    + 'style="width:100%;box-sizing:border-box;background:#080f1e;border:.5px solid rgba(59,130,246,.3);'
+    + 'border-radius:7px;color:#e2e8f0;font-size:12px;padding:8px 10px;outline:none;margin-bottom:8px">'
+    + '<div style="font-size:10px;color:#4b5e78;margin-bottom:10px">mínimo 8 caracteres</div>'
+    + '<div id="tm-s-msg" style="font-size:11px;min-height:16px;margin-bottom:10px"></div>'
+    + '<div style="display:flex;gap:8px;justify-content:flex-end">'
+    + '<button id="tm-s-cancel" style="background:transparent;border:.5px solid rgba(59,130,246,.25);'
+    + 'color:#4b5e78;border-radius:7px;padding:7px 14px;font-size:11px;cursor:pointer;'
+    + 'font-family:inherit">Cancelar</button>'
+    + '<button id="tm-s-ok" style="background:var(--blue-2,#1d4ed8);border:none;color:#fff;'
+    + 'border-radius:7px;padding:7px 18px;font-size:11px;cursor:pointer;font-family:inherit;'
+    + 'font-weight:500">Salvar</button></div></div>';
+  document.body.appendChild(d);
+
+  function msg(t,erro){
+    var m=document.getElementById('tm-s-msg');
+    if(m){ m.textContent=t||''; m.style.color = erro ? '#fca5a5' : '#86efac'; }
+  }
+  function limpar(){
+    var a=document.getElementById('tm-s1'), b=document.getElementById('tm-s2');
+    if(a) a.value=''; if(b) b.value='';
+  }
+
+  document.getElementById('tm-s-cancel').addEventListener('click', function(){
+    limpar(); fecharTrocarSenha();
+  });
+
+  document.getElementById('tm-s-ok').addEventListener('click', function(){
+    var s1=document.getElementById('tm-s1').value;
+    var s2=document.getElementById('tm-s2').value;
+    if(!s1 || !s2){ msg('preencha os dois campos', true); return; }
+    if(s1 !== s2){ msg('as senhas não conferem', true); limpar(); return; }
+    if(s1.length < 8){ msg('mínimo 8 caracteres', true); return; }
+
+    var c=_cfg(), t=_tok();
+    if(!c || !t){ msg('sessão expirada — entre de novo', true); return; }
+
+    msg('salvando...', false);
+    fetch(c.url+'/auth/v1/user', {
+        method:'PUT',
+        headers:{'apikey':c.publishableKey,'Authorization':'Bearer '+t,
+                 'Content-Type':'application/json'},
+        body: JSON.stringify({password:s1})
+      })
+      .then(function(r){ return r.text().then(function(x){ return {ok:r.ok, s:r.status, x:x}; }); })
+      .then(function(r){
+        limpar();                                  /* a senha sai da memoria do DOM */
+        if(!r.ok){
+          var m='erro '+r.s;
+          try{ var j=JSON.parse(r.x); m = j.msg || j.message || j.error_description || m; }catch(e){}
+          if(/should be different|same as the old/i.test(m)) m='a nova senha deve ser diferente da atual';
+          if(/at least|length/i.test(m)) m='senha muito curta';
+          msg(m, true);
+          return;
+        }
+        msg('senha alterada', false);
+        setTimeout(fecharTrocarSenha, 1200);
+      })
+      .catch(function(){ limpar(); msg('rede indisponível', true); });
+  });
+}
+
+try{
+  window.abrirTrocarSenha = abrirTrocarSenha;
+  window.fecharTrocarSenha = fecharTrocarSenha;
 }catch(e){}
 
 })();
