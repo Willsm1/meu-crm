@@ -1,0 +1,46 @@
+name: Enable Realtime Sync
+on:
+  push:
+    branches: [realtime-sync]
+    paths:
+      - 'supabase-realtime.js'
+      - 'tools/enable_realtime_sync.py'
+      - '.github/workflows/enable-realtime-sync.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: realtime-sync
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply guarded patch
+        run: python tools/enable_realtime_sync.py
+      - name: Validate JS syntax
+        run: node --check supabase-realtime.js
+      - name: Validate tag exactly once
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('crm.html').read_text(encoding='utf-8')
+          assert s.count('<script src="supabase-realtime.js"></script>')==1
+          assert s.count('<script src="supabase-canonical.js"></script>')==1
+          print('Realtime invariants: PASS')
+          PY
+      - name: Commit patched crm.html when needed
+        run: |
+          if git diff --quiet -- crm.html; then exit 0; fi
+          git config user.name 'Taurus Magnum Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add crm.html
+          git commit -m 'Enable realtime CRM sync on test branch'
+          git push origin HEAD:realtime-sync
