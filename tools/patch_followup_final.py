@@ -7,20 +7,7 @@ s=crm.read_text(encoding='utf-8')
 c=canon.read_text(encoding='utf-8')
 
 # 1) Follow-up pagination beyond PostgREST 1000-row cap.
-old="""  fetch(c.url+'/rest/v1/v_followup?select=*', {
-      method:'GET',
-      headers:{'apikey':c.publishableKey,'Authorization':'Bearer '+tok,
-               'Accept-Profile': c.schema||'crm'},
-      signal: ctl?ctl.signal:undefined
-    })
-    .then(function(r){
-      clearTimeout(t);
-      if(!r.ok) throw new Error('HTTP '+r.status);
-      return r.json();
-    })
-    .then(function(rows){
-      _fuLinhas = Array.isArray(rows)?rows:[];
-"""
+pat=re.compile(r"  fetch\(c\.url\+'/rest/v1/v_followup\?select=\*', \{[\s\S]*?\n    \.then\(function\(rows\)\{\n      _fuLinhas = Array\.isArray\(rows\)\?rows:\[\];",re.M)
 new="""  var pageSize=1000;
   function buscarPagina(offset, acumulado){
     return fetch(c.url+'/rest/v1/v_followup?select=*&order=lead_id.asc&limit='+pageSize+'&offset='+offset, {
@@ -42,11 +29,10 @@ new="""  var pageSize=1000;
   buscarPagina(0,[])
     .then(function(rows){
       clearTimeout(t);
-      _fuLinhas = Array.isArray(rows)?rows:[];
-"""
-if old not in s:
+      _fuLinhas = Array.isArray(rows)?rows:[];"""
+s,n=pat.subn(new,s,count=1)
+if n!=1:
     raise SystemExit('fuCarregar block not found')
-s=s.replace(old,new,1)
 
 # 2) Seven-day cadence visual helper.
 anchor="function _dt(d){ if(!d) return '—'; var p=String(d).split('-'); return p.length===3?(p[2]+'/'+p[1]):d; }\n"
@@ -104,7 +90,6 @@ c=c.replace(oldc,newc,1)
 crm.write_text(s,encoding='utf-8')
 canon.write_text(c,encoding='utf-8')
 
-# invariants
 assert 'Cadência 7D' in s
 assert "limit='+pageSize+'&offset=" in s
 assert '_fuCadencia(x.cadencia_7d)' in s
