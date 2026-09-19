@@ -21,10 +21,11 @@ jobs:
       - name: Validate invariants
         run: |
           grep -q 'Acesso ao CRM' crm.html
-          grep -q 'autocomplete=\\"username\\"' crm.html
-          grep -q 'autocomplete=\\"current-password\\"' crm.html
-          grep -q 'RETOMAR EM' crm.html
+          grep -q 'autocomplete="username"' crm.html
+          grep -q 'autocomplete="current-password"' crm.html
+          grep -q 'Retomar em' crm.html
           grep -q 'agendado' crm.html
+          grep -q 'Faltam ' crm.html
           ! grep -q 'smoke test V1.3' crm.html
       - name: Commit generated changes
         run: |
