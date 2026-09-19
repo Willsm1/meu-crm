@@ -1,0 +1,57 @@
+name: Fix Supabase Pagination
+
+on:
+  push:
+    branches: [pagination-fix]
+    paths:
+      - 'tools/fix_supabase_pagination.py'
+      - '.github/workflows/fix-pagination.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: pagination-fix
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply guarded patch
+        run: python tools/fix_supabase_pagination.py
+      - name: Validate JavaScript syntax
+        run: node --check supabase-canonical.js
+      - name: Validate pagination invariants
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('supabase-canonical.js').read_text(encoding='utf-8')
+          checks={
+            'page size 1000': 'var pageSize=1000;' in s,
+            'recursive paging': 'buscarPagina(offset+pageSize,acumulado)' in s,
+            'stable order': 'order=created_at.desc,id.desc' in s,
+            'canonical source unchanged': 'window.carregarLeadsSupabase=carregarCanonico;' in s,
+          }
+          bad=[k for k,v in checks.items() if not v]
+          if bad: raise SystemExit('VALIDACAO FALHOU: '+', '.join(bad))
+          print('Pagination invariants: PASS')
+          PY
+      - name: Commit patched file when needed
+        run: |
+          if git diff --quiet -- supabase-canonical.js; then
+            echo 'No patch needed.'
+            exit 0
+          fi
+          git config user.name 'Taurus Magnum Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add supabase-canonical.js
+          git commit -m 'Paginate Supabase lead loading beyond 1000 rows'
+          git push origin HEAD:pagination-fix
