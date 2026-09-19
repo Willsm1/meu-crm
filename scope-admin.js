@@ -3,7 +3,8 @@
 'use strict';
 var allRows=[];
 var visibleSnap=new Map();
-var ctx={me:null,options:[],assignments:new Map()};
+var ctx={me:null,options:[],assignments:new Map(),teams:new Map()};
+var scopeInitialized=false;
 var scope={type:'mine',id:null};
 var rawReload=null, rawRefresh=null;
 var saveChain=Promise.resolve();
@@ -16,6 +17,15 @@ function tok(){
 function hdr(){ var c=cfg(),t=tok(); return c&&t?{'apikey':c.publishableKey,'Authorization':'Bearer '+t,'Content-Type':'application/json','Accept-Profile':c.schema||'crm','Content-Profile':c.schema||'crm'}:null; }
 function rpc(n,b){ return window.CRM_CANONICAL.rpc(n,b||{}); }
 function get(path){ var c=cfg(),h=hdr(); if(!c||!h) return Promise.reject(new Error('Sessão ausente')); return fetch(c.url+'/rest/v1/'+path,{headers:h}).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); }
+function getRange(path,from,to){ var c=cfg(),h=hdr(); if(!c||!h) return Promise.reject(new Error('Sessão ausente')); var hh=Object.assign({},h,{'Range':String(from)+'-'+String(to),'Prefer':'count=exact'}); return fetch(c.url+'/rest/v1/'+path,{headers:hh}).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); }
+function mapLeadRow(l){ return {id:String(l.local_id||l.id),_uuid:l.id,nome:l.nome||'',empresa:l.empresa||'',email:l.email||'',telefone:l.telefone||'',status:l.status||'Novo',valor:(l.valor===null||l.valor===undefined)?'':l.valor,data:l.data_entrada||'',data_entrada:l.data_entrada||'',origem:l.origem||'',perfil:l.perfil||'',regiao:l.regiao||'',ult_meu:l.ult_meu||'',ult_dele:l.ult_dele||'',notas:l.notas||'',proximo_contato:l.proximo_contato||''}; }
+function loadAllLeads(){
+  var cols='id,local_id,nome,telefone,email,empresa,status,valor,perfil,regiao,origem,data_entrada,ult_meu,ult_dele,notas,proximo_contato';
+  var path='leads?select='+cols+'&deleted_at=is.null&order=id.asc';
+  var out=[];
+  function page(from){ return getRange(path,from,from+999).then(function(rows){ rows=Array.isArray(rows)?rows:[]; out=out.concat(rows); return rows.length===1000?page(from+1000):out; }); }
+  return page(0).then(function(rows){ return rows.map(mapLeadRow); });
+}
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function val(v){ return v==null?'':String(v); }
 function canon(l){ return {nome:val(l.nome).trim(),telefone:val(l.telefone).trim(),email:val(l.email).trim().toLowerCase(),empresa:val(l.empresa).trim(),status:val(l.status||'Novo'),valor:val(l.valor),perfil:val(l.perfil),regiao:val(l.regiao).trim(),origem:val(l.origem).trim(),data_entrada:val(l.data||l.data_entrada),ult_meu:val(l.ult_meu),ult_dele:val(l.ult_dele),notas:val(l.notas),proximo_contato:val(l.proximo_contato)}; }
@@ -31,6 +41,8 @@ function loadContext(){
   ]).then(function(r){
     ctx.me=Array.isArray(r[0])?r[0][0]:r[0];
     ctx.options=Array.isArray(r[1])?r[1]:[];
+    ctx.teams=new Map();
+    ctx.options.forEach(function(p){ if(p.team_id&&p.team_name) ctx.teams.set(String(p.team_id),p.team_name); });
     ctx.assignments=new Map();
     (Array.isArray(r[2])?r[2]:[]).forEach(function(a){ ctx.assignments.set(String(a.lead_id),a); });
     restoreScope();
@@ -39,18 +51,19 @@ function loadContext(){
   });
 }
 function restoreScope(){
-  var saved=null; try{ saved=JSON.parse(localStorage.getItem('crm_view_scope')||'null'); }catch(e){}
   var role=ctx.me&&ctx.me.role;
-  if(role==='executivo'){ scope={type:'mine',id:null}; return; }
-  if(saved&&['mine','all','team','user'].indexOf(saved.type)>=0){ scope=saved; } else scope={type:'mine',id:null};
-  if(role!=='admin'&&scope.type==='all') scope={type:'mine',id:null};
+  if(role==='executivo'){ scope={type:'mine',id:null}; scopeInitialized=true; return; }
+  if(!scopeInitialized){ scope={type:'mine',id:null}; scopeInitialized=true; return; }
+  if(scope.type==='all'&&role!=='admin') scope={type:'mine',id:null};
+  if(scope.type==='my_team'&&!(ctx.me&&ctx.me.team_id)) scope={type:'mine',id:null};
 }
-function saveScope(){ try{ localStorage.setItem('crm_view_scope',JSON.stringify(scope)); }catch(e){} }
+function saveScope(){ /* escopo persiste apenas durante a sessão; cada abertura começa em Minha base */ }
 function ownerOf(l){ return ctx.assignments.get(String(l._uuid||''))||null; }
 function allowed(l){
   var me=ctx.me,a=ownerOf(l); if(!me) return true;
   if(me.role==='executivo') return !a||String(a.user_id)===String(me.id);
   if(scope.type==='all') return me.role==='admin';
+  if(scope.type==='my_team') return !!a&&String(a.team_id)===String(me.team_id||'');
   if(scope.type==='team') return !!a&&String(a.team_id)===String(scope.id);
   if(scope.type==='user') return !!a&&String(a.user_id)===String(scope.id);
   return !!a&&String(a.user_id)===String(me.id);
@@ -65,17 +78,17 @@ function applyScope(){
   return rows;
 }
 function annotate(rows){
-  return (rows||[]).map(function(l){ var a=ownerOf(l); l._owner_id=a&&a.user_id||null; l._team_id=a&&a.team_id||null; return l; });
+  return (rows||[]).map(function(l){ var a=ownerOf(l),tid=a&&a.team_id||null; l._owner_id=a&&a.user_id||null; l._team_id=tid; l._team_name=tid?(ctx.teams.get(String(tid))||''):''; l.empresa=l._team_name||''; return l; });
 }
 function scopedReload(){
-  if(!rawReload) return Promise.resolve([]);
-  return Promise.all([rawReload(),loadContext()]).then(function(r){ allRows=annotate(r[0]||[]); return applyScope(); });
+  return loadContext().then(function(){ return loadAllLeads(); }).then(function(rows){ allRows=annotate(rows||[]); return applyScope(); });
 }
 function setScope(next){ scope=next||{type:'mine',id:null}; saveScope(); renderScopeBar(); return applyScope(); }
 function allowFollowup(x){
   var me=ctx.me; if(!me) return true;
   if(me.role==='executivo') return true;
   if(scope.type==='all') return me.role==='admin';
+  if(scope.type==='my_team') return String(x.responsavel_team_id||'')===String(me.team_id||'');
   if(scope.type==='team') return String(x.responsavel_team_id||'')===String(scope.id||'');
   if(scope.type==='user') return String(x.responsavel_id||'')===String(scope.id||'');
   return String(x.responsavel_id||'')===String(me.id||'');
@@ -84,9 +97,13 @@ function syncFollowup(){ try{ if(window.fuRenderFila) window.fuRenderFila(); }ca
 
 function scopeOptions(){
   var me=ctx.me||{},opts=[{v:'mine',t:'Minha base'}];
+  if(me.team_id) opts.push({v:'my_team',t:'Minha equipe'});
   if(me.role==='admin') opts.push({v:'all',t:'Todos'});
   var teams={},users=[];
-  ctx.options.forEach(function(p){ if(p.team_id&&p.team_name) teams[p.team_id]=p.team_name; if(p.is_active&&String(p.user_id)!==String(me.id)) users.push(p); });
+  ctx.options.forEach(function(p){
+    if(p.team_id&&p.team_name) teams[p.team_id]=p.team_name;
+    if(p.is_active&&String(p.user_id)!==String(me.id) && (me.role==='admin'||String(p.team_id||'')===String(me.team_id||''))) users.push(p);
+  });
   if(me.role==='admin'||me.role==='gerente') Object.keys(teams).sort(function(a,b){return teams[a].localeCompare(teams[b]);}).forEach(function(id){ opts.push({v:'team:'+id,t:'Equipe: '+teams[id]}); });
   users.sort(function(a,b){return String(a.full_name).localeCompare(String(b.full_name));}).forEach(function(p){ opts.push({v:'user:'+p.user_id,t:p.full_name}); });
   return opts;
@@ -110,7 +127,7 @@ function persist(){
   atuais.forEach(function(l){
     if(l._uuid){ var id=String(l._uuid),antes=visibleSnap.get(id),agora=canon(l); presentes.add(id); if(antes&&!same(antes,agora)){ var p=diff(antes,agora); if(Object.keys(p).length) ops.push(rpc('update_lead_by_id',{p_lead_id:l._uuid,p_patch:p})); } }
     else{
-      ops.push(rpc('create_lead_v2',{p_local_id:String(l.id||Date.now()),p_origem_criacao:'crm',p_nome:val(l.nome).trim(),p_telefone:val(l.telefone)||null,p_email:val(l.email)||null,p_empresa:val(l.empresa)||null,p_status:l.status||'Novo',p_valor:(l.valor==null||l.valor==='')?null:Number(l.valor),p_perfil:(l.perfil==='Moradia'||l.perfil==='Investimento')?l.perfil:null,p_regiao:val(l.regiao)||null,p_origem:val(l.origem)||null,p_data_entrada:l.data||l.data_entrada||null}));
+      ops.push(rpc('create_lead_v2',{p_local_id:String(l.id||Date.now()),p_origem_criacao:'crm',p_nome:val(l.nome).trim(),p_telefone:val(l.telefone)||null,p_email:val(l.email)||null,p_empresa:null,p_status:l.status||'Novo',p_valor:(l.valor==null||l.valor==='')?null:Number(l.valor),p_perfil:(l.perfil==='Moradia'||l.perfil==='Investimento')?l.perfil:null,p_regiao:val(l.regiao)||null,p_origem:val(l.origem)||null,p_data_entrada:l.data||l.data_entrada||null}));
     }
   });
   visibleSnap.forEach(function(v,id){ if(!presentes.has(id)) ops.push(rpc('archive_lead',{p_lead_id:id,p_motivo:'Arquivado pelo CRM'})); });
