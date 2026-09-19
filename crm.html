@@ -510,7 +510,7 @@ PARTE 1 — CSS
       <thead><tr id="leads-thead">
         <th style="width:2.5%;text-align:center"><input type="checkbox" class="cb" id="cb-all" onclick="toggleAll(this)" title="Selecionar todos"></th>
         <th style="width:12.3%" class="sortable" onclick="setSort('nome',this)">Nome</th>
-        <th style="width:10.2%" class="sortable" onclick="setSort('empresa',this)">Empresa</th>
+        <th style="width:10.2%" class="sortable" onclick="setSort('empresa',this)">Equipe</th>
         <th style="width:13.5%">Contato</th>
         <th style="width:12.1%" class="sortable" onclick="setSort('status',this)">Status</th>
         <th style="width:8.6%" class="sortable" onclick="setSort('valor',this)">Valor</th>
@@ -601,7 +601,7 @@ PARTE 1 — CSS
     <div class="preview-table-wrap">
       <table>
         <thead><tr>
-          <th>Nome</th><th>Empresa</th><th>Email</th><th>Telefone</th>
+          <th>Nome</th><th>Equipe</th><th>Email</th><th>Telefone</th>
           <th>Status</th><th>Valor</th><th>Origem</th><th>Retomar em</th>
         </tr></thead>
         <tbody id="preview-body"></tbody>
@@ -620,7 +620,7 @@ PARTE 1 — CSS
     </div>
     <div class="form-grid">
       <div class="form-row"><label>Nome *</label><input id="f-nome" placeholder="Nome completo"></div>
-      <div class="form-row"><label>Empresa</label><input id="f-empresa" placeholder="Nome da empresa"></div>
+      <div class="form-row"><label>Equipe</label><input id="f-empresa" placeholder="Definida automaticamente" disabled></div>
     </div>
     <div class="form-grid">
       <div class="form-row"><label>E-mail</label><input id="f-email" type="email" placeholder="email@exemplo.com"></div>
@@ -718,7 +718,7 @@ const EXP_COLS=[
   {id:'col-nome',    key:'nome',     label:'Nome'},
   {id:'col-telefone',key:'telefone', label:'Telefone'},
   {id:'col-status',  key:'_status',  label:'Etapa'},
-  {id:'col-empresa', key:'empresa',  label:'Empresa'},
+  {id:'col-empresa', key:'empresa',  label:'Equipe'},
   {id:'col-email',   key:'email',    label:'Email'},
   {id:'col-origem',  key:'origem',   label:'Origem'},
   {id:'col-notas',   key:'notas',    label:'Anotações'},
@@ -3128,7 +3128,7 @@ function exportCSV(){
   }
   if(!alvo.length){alert('Nenhum lead selecionado.'); return;}
   const keys=['nome','empresa','email','telefone','status','valor','data','origem','perfil','regiao','notas'];
-  const headers=['Nome','Empresa','Email','Telefone','Status','Valor','Data','Origem','Perfil','Região','Anotações'];
+  const headers=['Nome','Equipe','Email','Telefone','Status','Valor','Data','Origem','Perfil','Região','Anotações'];
   const rows=alvo.map(l=>{ const r={}; keys.forEach((k,i)=>r[headers[i]]=(l[k]||'').toString()); return r; });
   downloadBlob(nomeArquivo, buildCSVContent(rows,headers));
   showToast('✓ '+alvo.length+' lead(s) exportado(s)!');
@@ -4012,7 +4012,7 @@ function blEnviarAoSheets(bl){
         <label class="exp-check"><input type="checkbox" class="cb" id="col-nome" checked disabled> <span style="font-size:13px;color:var(--text-secondary)">Nome</span> <span style="font-size:11px;color:var(--text-muted)">(sempre incluído)</span></label>
         <label class="exp-check"><input type="checkbox" class="cb" id="col-telefone" checked> <span style="font-size:13px;color:var(--text-secondary)">Telefone</span></label>
         <label class="exp-check"><input type="checkbox" class="cb" id="col-status" checked> <span style="font-size:13px;color:var(--text-secondary)">Status / Etapa</span></label>
-        <label class="exp-check"><input type="checkbox" class="cb" id="col-empresa"> <span style="font-size:13px;color:var(--text-secondary)">Empresa</span></label>
+        <label class="exp-check"><input type="checkbox" class="cb" id="col-empresa"> <span style="font-size:13px;color:var(--text-secondary)">Equipe</span></label>
         <label class="exp-check"><input type="checkbox" class="cb" id="col-email"> <span style="font-size:13px;color:var(--text-secondary)">Email</span></label>
         <label class="exp-check"><input type="checkbox" class="cb" id="col-origem"> <span style="font-size:13px;color:var(--text-secondary)">Origem</span></label>
         <label class="exp-check"><input type="checkbox" class="cb" id="col-notas"> <span style="font-size:13px;color:var(--text-secondary)">Anotações</span></label>
