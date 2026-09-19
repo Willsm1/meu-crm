@@ -8,10 +8,10 @@ s=s.replace('>Supabase Auth</div>', '>Acesso ao CRM</div>', 1)
 s=s.replace('smoke test V1.3 &middot; o CRM continua usando os dados locais</div>', 'Taurus Magnum CRM</div>', 1)
 
 # LOGIN: browser credential autofill semantics
-s=s.replace('id=\\"tm-auth-email\\" type=\\"email\\" autocomplete=\\"off\\" name=\\"tm-login-email\\"',
-            'id=\\"tm-auth-email\\" type=\\"email\\" autocomplete=\\"username\\" name=\\"username\\" autocapitalize=\\"none\\" spellcheck=\\"false\\"',1)
-s=s.replace('id=\\"tm-auth-pass\\" type=\\"password\\" autocomplete=\\"new-password\\" name=\\"tm-login-pass\\"',
-            'id=\\"tm-auth-pass\\" type=\\"password\\" autocomplete=\\"current-password\\" name=\\"password\\"',1)
+s=s.replace('id="tm-auth-email" type="email" autocomplete="off" name="tm-login-email"',
+            'id="tm-auth-email" type="email" autocomplete="username" name="username" autocapitalize="none" spellcheck="false"',1)
+s=s.replace('id="tm-auth-pass" type="password" autocomplete="new-password" name="tm-login-pass"',
+            'id="tm-auth-pass" type="password" autocomplete="current-password" name="password"',1)
 
 # LOGIN: add eye button with minimal DOM manipulation after the modal exists
 anchor="  document.getElementById('tm-auth-entrar').addEventListener('click', function(){"
@@ -43,25 +43,25 @@ s=s.replace("hoje:['#fcd34d','rgba(252,211,77,.15)','Hoje'],\n         sem_conta
             "hoje:['#fcd34d','rgba(252,211,77,.15)','Hoje'],\n         agendado:['#93c5fd','rgba(59,130,246,.15)','Agendado'],\n         sem_contato:",1)
 
 # FOLLOW-UP: priority filter
-s=s.replace('<option value=\\"hoje\\">Para hoje</option>\n        <option value=\\"sem_contato\\">Sem contato</option>',
-            '<option value=\\"hoje\\">Para hoje</option>\n        <option value=\\"agendado\\">Agendados</option>\n        <option value=\\"sem_contato\\">Sem registro</option>',1)
+s=s.replace('<option value="hoje">Para hoje</option>\n        <option value="sem_contato">Sem contato</option>',
+            '<option value="hoje">Para hoje</option>\n        <option value="agendado">Agendados</option>\n        <option value="sem_contato">Sem registro</option>',1)
 
 # FOLLOW-UP: rename final action header
 s=s.replace('>AÇÃO</th>', '>RETOMAR EM</th>', 1)
 
 # FOLLOW-UP: countdown next-contact helper in existing Próximo column
-old="""      + '<td style=\"font-size:12px\">'+_dt(x.proximo_contato)
-        + (x.dias_vencido>0?'<div style=\"font-size:10px;color:#fca5a5\">'+x.dias_vencido+'d atras</div>':'')+'</td>'
+old="""      + '<td style="font-size:12px">'+_dt(x.proximo_contato)
+        + (x.dias_vencido>0?'<div style="font-size:10px;color:#fca5a5">'+x.dias_vencido+'d atras</div>':'')+'</td>'
 """
-new="""      + '<td style=\"font-size:12px\">'+_dt(x.proximo_contato)
-        + (x.dias_vencido>0?'<div style=\"font-size:10px;color:#fca5a5\">Vencido há '+x.dias_vencido+'d</div>':(x.dias_vencido===0?'<div style=\"font-size:10px;color:#fcd34d\">Hoje</div>':(x.dias_vencido<0?'<div style=\"font-size:10px;color:#93c5fd\">Faltam '+Math.abs(x.dias_vencido)+'d</div>':'')))+'</td>'
+new="""      + '<td style="font-size:12px">'+_dt(x.proximo_contato)
+        + (x.dias_vencido>0?'<div style="font-size:10px;color:#fca5a5">Vencido há '+x.dias_vencido+'d</div>':(x.dias_vencido===0?'<div style="font-size:10px;color:#fcd34d">Hoje</div>':(x.dias_vencido<0?'<div style="font-size:10px;color:#93c5fd">Faltam '+Math.abs(x.dias_vencido)+'d</div>':'')))+'</td>'
 """
 if old not in s:
     raise SystemExit('next contact cell not found')
 s=s.replace(old,new,1)
 
 # validations
-checks=['Acesso ao CRM','Taurus Magnum CRM','autocomplete=\\"username\\"','autocomplete=\\"current-password\\"','tm-auth-eye','agendado','Agendado','RETOMAR EM','Faltam ']
+checks=['Acesso ao CRM','Taurus Magnum CRM','autocomplete="username"','autocomplete="current-password"','tm-auth-eye','agendado','Agendado','RETOMAR EM','Faltam ']
 for c in checks:
     if c not in s: raise SystemExit('missing '+c)
 if 'smoke test V1.3' in s: raise SystemExit('legacy smoke title remains')
