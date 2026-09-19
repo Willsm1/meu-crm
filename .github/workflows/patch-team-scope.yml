@@ -1,0 +1,36 @@
+name: Patch Team Scope
+on:
+  push:
+    branches: [team-scope-final]
+    paths:
+      - 'tools/team_scope_trigger.txt'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: team-scope-final
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply audited patch
+        run: python tools/patch_team_scope.py
+      - name: Validate invariants
+        run: |
+          grep -q 'loadAllLeads' scope-admin.js
+          grep -q 'Minha equipe' scope-admin.js
+          grep -q 'my_team' scope-admin.js
+          grep -q 'l._team_name' scope-admin.js
+          grep -q '>Equipe</th>' crm.html
+          grep -q 'Definida automaticamente' crm.html
+      - name: Commit generated changes
+        run: |
+          git config user.name 'Willsm1'
+          git config user.email 'willsm1@hotmail.com'
+          git add crm.html scope-admin.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'Add team hierarchy and full scoped lead pagination'
+          git push origin HEAD:team-scope-final
