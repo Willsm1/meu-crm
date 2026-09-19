@@ -47,7 +47,7 @@ s=s.replace('<option value="hoje">Para hoje</option>\n        <option value="sem
             '<option value="hoje">Para hoje</option>\n        <option value="agendado">Agendados</option>\n        <option value="sem_contato">Sem registro</option>',1)
 
 # FOLLOW-UP: rename final action header
-s=s.replace('>AÇÃO</th>', '>RETOMAR EM</th>', 1)
+s=s.replace('>Ação</th>', '>Retomar em</th>', 1)
 
 # FOLLOW-UP: countdown next-contact helper in existing Próximo column
 old="""      + '<td style="font-size:12px">'+_dt(x.proximo_contato)
@@ -61,7 +61,7 @@ if old not in s:
 s=s.replace(old,new,1)
 
 # validations
-checks=['Acesso ao CRM','Taurus Magnum CRM','autocomplete="username"','autocomplete="current-password"','tm-auth-eye','agendado','Agendado','RETOMAR EM','Faltam ']
+checks=['Acesso ao CRM','Taurus Magnum CRM','autocomplete="username"','autocomplete="current-password"','tm-auth-eye','agendado','Agendado','Retomar em','Faltam ']
 for c in checks:
     if c not in s: raise SystemExit('missing '+c)
 if 'smoke test V1.3' in s: raise SystemExit('legacy smoke title remains')
