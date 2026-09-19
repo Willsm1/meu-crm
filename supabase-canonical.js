@@ -245,7 +245,16 @@ function esconderLegado(){
 window.addEventListener('message',function(ev){
   if(ev.source!==window || !ev.data || ev.data.type!=='CRM_UPDATED') return;
   clearTimeout(_refreshTimer);
-  _refreshTimer=setTimeout(function(){ if(papelValido()) carregarNaTela(); },500);
+  _refreshTimer=setTimeout(function(){
+    if(!papelValido()) return;
+    carregarNaTela().then(function(){
+      try{
+        var pg=document.getElementById('page-followup');
+        if(pg && pg.classList.contains('active') && window.CRM_FOLLOWUP && window.CRM_FOLLOWUP.carregar)
+          window.CRM_FOLLOWUP.carregar();
+      }catch(e){}
+    });
+  },500);
 });
 
 function bootstrap(){
