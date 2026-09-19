@@ -5460,6 +5460,7 @@ function fuRenderFila(){
   var fr=(selR && selR.style.display!=='none') ? (selR.value||'') : '';
 
   var lista=_fuLinhas.filter(function(x){
+    if(window.CRM_SCOPE && window.CRM_SCOPE.allowFollowup && !window.CRM_SCOPE.allowFollowup(x)) return false;
     if(fp && x.prioridade!==fp) return false;
     if(bq && String(x.nome||'').toLowerCase().indexOf(bq)<0) return false;
     if(fr){
@@ -5475,7 +5476,7 @@ function fuRenderFila(){
   if(badge){ badge.textContent=urg; badge.style.display=urg?'inline-block':'none'; }
 
   if(!lista.length){
-    tb.innerHTML='<tr><td colspan="9"><div class="empty">Nenhum lead nesta fila.</div></td></tr>';
+    tb.innerHTML='<tr><td colspan="10"><div class="empty">Nenhum lead nesta fila.</div></td></tr>';
     return;
   }
 
@@ -5489,7 +5490,7 @@ function fuRenderFila(){
       + '<td style="font-size:12px">'+_dt(x.ultimo_contato)+'</td>'
       + '<td style="font-size:12px">'+_dt(x.ult_dele)+'</td>'
       + '<td>'+_fuCadencia(x.cadencia_7d)+'</td>'
-      + '<td style="font-size:12px">'+(x.dias_parado===null||x.dias_parado===undefined?'—':x.dias_parado+'d')+'</td>'
+      + '<td style="font-size:12px">'+(x.ultimo_contato?(x.dias_parado===null||x.dias_parado===undefined?'—':x.dias_parado+'d'):'Sem registro')+'</td>'
       + '<td style="font-size:12px">'+_dt(x.proximo_contato)
         + (x.dias_vencido>0?'<div style="font-size:10px;color:#fca5a5">'+x.dias_vencido+'d atras</div>':'')+'</td>'
       + '<td>'+_fuChip(x.prioridade)+'</td>'
@@ -6007,5 +6008,6 @@ try{
 
 <script src="supabase-canonical.js?v=20260919-1749"></script>
 <script src="supabase-realtime.js"></script>
+<script src="scope-admin.js?v=20260919-1704"></script>
 </body>
 </html>
