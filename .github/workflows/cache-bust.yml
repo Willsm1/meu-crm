@@ -1,0 +1,31 @@
+name: Cache Bust Canonical CRM
+on:
+  push:
+    branches: [cache-bust]
+    paths:
+      - 'tools/cache_bust_supabase.py'
+      - '.github/workflows/cache-bust.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cache-bust
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Patch script tag
+        run: python tools/cache_bust_supabase.py
+      - name: Commit crm.html
+        run: |
+          if git diff --quiet -- crm.html; then exit 0; fi
+          git config user.name 'Taurus Magnum Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add crm.html
+          git commit -m 'Bust Supabase canonical asset cache'
+          git push origin HEAD:cache-bust
