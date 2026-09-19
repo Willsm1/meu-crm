@@ -1,0 +1,35 @@
+name: Patch Login UX
+on:
+  push:
+    branches: [login-ux-final]
+    paths:
+      - 'tools/login_ux_trigger.txt'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: login-ux-final
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply audited patch
+        run: python tools/patch_login_ux.py
+      - name: Validate invariants
+        run: |
+          grep -q 'Acesso ao CRM' crm.html
+          grep -q 'autocomplete=\\"username\\"' crm.html
+          grep -q 'autocomplete=\\"current-password\\"' crm.html
+          grep -q 'tm-auth-eye' crm.html
+          ! grep -q 'smoke test V1.3' crm.html
+      - name: Commit generated changes
+        run: |
+          git config user.name "Willsm1"
+          git config user.email "willsm1@hotmail.com"
+          git add crm.html
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Polish CRM login autofill and password visibility"
+          git push origin login-ux-final
