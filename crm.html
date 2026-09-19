@@ -602,7 +602,7 @@ PARTE 1 — CSS
       <table>
         <thead><tr>
           <th>Nome</th><th>Empresa</th><th>Email</th><th>Telefone</th>
-          <th>Status</th><th>Valor</th><th>Origem</th><th>Ação</th>
+          <th>Status</th><th>Valor</th><th>Origem</th><th>Retomar em</th>
         </tr></thead>
         <tbody id="preview-body"></tbody>
       </table>
@@ -4125,7 +4125,8 @@ function blEnviarAoSheets(bl){
         <option value="">Todas as prioridades</option>
         <option value="vencido">Vencidos</option>
         <option value="hoje">Para hoje</option>
-        <option value="sem_contato">Sem contato</option>
+        <option value="agendado">Agendados</option>
+        <option value="sem_contato">Sem registro</option>
         <option value="parado">Parados 7+ dias</option>
       </select>
       <input id="fu-busca" placeholder="Buscar nome..." oninput="fuRenderFila()"
@@ -4786,19 +4787,19 @@ function authOpen(){
   d.innerHTML =
      '<div style="width:100%;max-width:340px;background:#0e1628;'
     + 'border:1px solid rgba(59,130,246,.4);border-radius:12px;padding:22px">'
-    + '<div style="font-size:13px;font-weight:600;color:#60a5fa;margin-bottom:3px">Supabase Auth</div>'
+    + '<div style="font-size:13px;font-weight:600;color:#60a5fa;margin-bottom:3px">Acesso ao CRM</div>'
     + '<div style="font-size:10.5px;color:#4b5e78;margin-bottom:16px">'
-    + 'smoke test V1.3 &middot; o CRM continua usando os dados locais</div>'
+    + 'Taurus Magnum CRM</div>'
     + '<div id="tm-auth-logado" style="display:none;font-size:12px;color:#86efac;margin-bottom:14px"></div>'
     + '<div id="tm-auth-form">'
     +   '<label for="tm-auth-email" style="display:block;font-size:9px;letter-spacing:.08em;'
     +   'text-transform:uppercase;color:#4b5e78;margin-bottom:4px">E-mail</label>'
-    +   '<input id="tm-auth-email" type="email" autocomplete="off" name="tm-login-email" '
+    +   '<input id="tm-auth-email" type="email" autocomplete="username" name="username" autocapitalize="none" spellcheck="false" '
     +   'style="width:100%;box-sizing:border-box;background:#080f1e;border:.5px solid rgba(59,130,246,.3);'
     +   'border-radius:7px;color:#e2e8f0;font-size:12px;padding:8px 10px;outline:none;margin-bottom:10px">'
     +   '<label for="tm-auth-pass" style="display:block;font-size:9px;letter-spacing:.08em;'
     +   'text-transform:uppercase;color:#4b5e78;margin-bottom:4px">Senha</label>'
-    +   '<input id="tm-auth-pass" type="password" autocomplete="new-password" name="tm-login-pass" '
+    +   '<input id="tm-auth-pass" type="password" autocomplete="current-password" name="password" '
     +   'style="width:100%;box-sizing:border-box;background:#080f1e;border:.5px solid rgba(59,130,246,.3);'
     +   'border-radius:7px;color:#e2e8f0;font-size:12px;padding:8px 10px;outline:none;margin-bottom:12px">'
     + '</div>'
@@ -4823,6 +4824,22 @@ function authOpen(){
     if(p && p!=='bloqueado'){ authClose(); return; }
     _msg('faca login para usar o CRM', true);
   });
+
+  (function(){
+    var p=document.getElementById('tm-auth-pass');
+    if(!p || document.getElementById('tm-auth-eye')) return;
+    var b=document.createElement('button');
+    b.id='tm-auth-eye'; b.type='button'; b.textContent='👁';
+    b.setAttribute('aria-label','Mostrar senha'); b.title='Mostrar senha';
+    b.style.cssText='margin-left:-34px;margin-right:8px;background:none;border:0;color:#94a3b8;cursor:pointer;font-size:15px;vertical-align:middle;position:relative;z-index:2';
+    p.style.paddingRight='38px';
+    p.insertAdjacentElement('afterend',b);
+    b.addEventListener('click',function(){
+      var show=p.type==='password'; p.type=show?'text':'password';
+      b.setAttribute('aria-label',show?'Ocultar senha':'Mostrar senha');
+      b.title=show?'Ocultar senha':'Mostrar senha';
+    });
+  })();
 
   document.getElementById('tm-auth-entrar').addEventListener('click', function(){
     const em = document.getElementById('tm-auth-email').value.trim();
@@ -5372,7 +5389,7 @@ function fuCarregar(){
 }
 
 /* ─── ORDENACAO exigida ───────────────────────────────────────────────── */
-var _PESO={vencido:0, hoje:1, sem_contato:2, parado:3, em_dia:4};
+var _PESO={vencido:0, hoje:1, agendado:2, parado:3, em_dia:4, sem_contato:5};
 
 function _fuOrdenar(a,b){
   var pa=_PESO[a.prioridade]!==undefined?_PESO[a.prioridade]:9;
@@ -5392,6 +5409,7 @@ function _fuOrdenar(a,b){
 function _fuChip(p){
   var m={vencido:['#fca5a5','rgba(248,113,113,.15)','Vencido'],
          hoje:['#fcd34d','rgba(252,211,77,.15)','Hoje'],
+         agendado:['#93c5fd','rgba(59,130,246,.15)','Agendado'],
          sem_contato:['#c4b5fd','rgba(196,181,253,.15)','Sem contato'],
          parado:['#fdba74','rgba(253,186,116,.15)','Parado'],
          em_dia:['#86efac','rgba(134,239,172,.15)','Em dia']}[p]||['#4b5e78','transparent',p||'—'];
@@ -5492,7 +5510,7 @@ function fuRenderFila(){
       + '<td>'+_fuCadencia(x.cadencia_7d)+'</td>'
       + '<td style="font-size:12px">'+(x.ultimo_contato?(x.dias_parado===null||x.dias_parado===undefined?'—':x.dias_parado+'d'):'Sem registro')+'</td>'
       + '<td style="font-size:12px">'+_dt(x.proximo_contato)
-        + (x.dias_vencido>0?'<div style="font-size:10px;color:#fca5a5">'+x.dias_vencido+'d atras</div>':'')+'</td>'
+        + (x.dias_vencido>0?'<div style="font-size:10px;color:#fca5a5">Vencido há '+x.dias_vencido+'d</div>':(x.dias_vencido===0?'<div style="font-size:10px;color:#fcd34d">Hoje</div>':(x.dias_vencido<0?'<div style="font-size:10px;color:#93c5fd">Faltam '+Math.abs(x.dias_vencido)+'d</div>':'')))+'</td>'
       + '<td>'+_fuChip(x.prioridade)+'</td>'
       + '<td style="white-space:nowrap">'
         + '<input type="date" id="fu-d-'+id+'" style="height:28px;font-size:11px;width:120px">'
