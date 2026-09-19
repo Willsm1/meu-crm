@@ -4232,9 +4232,9 @@ const SUPABASE_CONFIG = {
 
 /* ─── FEATURE FLAGS ─────────────────────────────────────────────────────── */
 const CRM_SUPABASE_SHADOW          = true;   // camada existe
-const CRM_SUPABASE_SOURCE_OF_TRUTH = false;  // OBRIGATORIO false nesta V1
-const CRM_FOLLOWUP_ENABLED         = false;  // OBRIGATORIO false nesta V1
-const CRM_SUPABASE_ALLOW_WRITE     = false;  // trava anti-migracao acidental
+const CRM_SUPABASE_SOURCE_OF_TRUTH = true;   // Supabase canonico
+const CRM_FOLLOWUP_ENABLED         = true;   // follow-up canonico ativo
+const CRM_SUPABASE_ALLOW_WRITE     = true;   // escrita somente via RPC auditada
 /* V1.4E PILOTO: escrita liberada EXCLUSIVAMENTE para criacao manual nova,
    pelo portao prepararCriacao. NAO libera migracao, importacao, edicao,
    Sheets nem extensao — nenhum desses passa pelo portao.
@@ -4245,7 +4245,7 @@ const CRM_SUPABASE_WRITE_NOVO_LEAD = true;
    ser alteradas pelo console. CRM_CREATE_LEAD_IDEMPOTENTE so pode virar true
    quando existir RPC idempotente auditada (hoje NAO existe).               */
 const CRM_SUPABASE_SHADOW_WRITE_ENABLED = false;  // V1.4A: obrigatorio false
-const CRM_CREATE_LEAD_IDEMPOTENTE       = false;  // V1.4A: obrigatorio false
+const CRM_CREATE_LEAD_IDEMPOTENTE       = true;   // create_lead_v2 auditada
 
 /* ─── ESTADO INTERNO ────────────────────────────────────────────────────── */
 const _sbState = {
@@ -4606,7 +4606,7 @@ try{
 'use strict';
 
 /* ─── MODO SEGURO ─────────────────────────────────────────────────────── */
-const CRM_AUTH_REQUIRED = false;   // NAO mudar nesta versao
+const CRM_AUTH_REQUIRED = true;    // login obrigatorio no CRM distribuido
 
 function _authPedido(){
   try{ return new URLSearchParams(window.location.search).get('auth') === '1'; }
@@ -5991,5 +5991,6 @@ try{
 })();
 </script>
 
+<script src="supabase-canonical.js"></script>
 </body>
 </html>
