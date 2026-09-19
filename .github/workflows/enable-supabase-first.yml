@@ -1,0 +1,58 @@
+name: Enable Supabase First
+
+on:
+  push:
+    branches: [supabase-first-clean]
+    paths:
+      - 'supabase-canonical.js'
+      - 'tools/enable_supabase_first.py'
+      - '.github/workflows/enable-supabase-first.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: supabase-first-clean
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply guarded patch
+        run: python tools/enable_supabase_first.py
+      - name: Validate canonical JavaScript syntax
+        run: node --check supabase-canonical.js
+      - name: Validate HTML invariants
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('crm.html').read_text(encoding='utf-8')
+          checks={
+            'canonical script exactly once': s.count('<script src="supabase-canonical.js"></script>')==1,
+            'source of truth true': 'const CRM_SUPABASE_SOURCE_OF_TRUTH = true;' in s,
+            'auth required true': 'const CRM_AUTH_REQUIRED = true;' in s,
+            'followup enabled': 'const CRM_FOLLOWUP_ENABLED         = true;' in s,
+          }
+          bad=[k for k,v in checks.items() if not v]
+          if bad: raise SystemExit('VALIDACAO FALHOU: '+', '.join(bad))
+          print('HTML invariants: PASS')
+          PY
+      - name: Commit patched crm.html when needed
+        run: |
+          if git diff --quiet -- crm.html; then
+            echo 'crm.html already patched; nothing to commit.'
+            exit 0
+          fi
+          git config user.name 'Taurus Magnum Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add crm.html
+          git commit -m 'Enable Supabase-first CRM on test branch'
+          git push origin HEAD:supabase-first-clean
