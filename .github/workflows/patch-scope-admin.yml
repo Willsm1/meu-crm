@@ -1,0 +1,37 @@
+name: Patch Scope Admin
+on:
+  push:
+    branches: [crm-admin-scope-final]
+    paths:
+      - 'tools/scope_admin_trigger.txt'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: crm-admin-scope-final
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply patch
+        run: python tools/patch_scope_admin.py
+      - name: Validate JS syntax
+        run: node --check scope-admin.js
+      - name: Validate invariants
+        run: |
+          grep -q "CRM_SCOPE.allowFollowup" crm.html
+          grep -q "Sem registro" crm.html
+          grep -q "scope-admin.js?v=20260919-1704" crm.html
+          grep -q "admin-users" scope-admin.js
+          grep -q "Minha base" scope-admin.js
+      - name: Commit generated changes
+        run: |
+          git config user.name "Willsm1"
+          git config user.email "willsm1@hotmail.com"
+          git add crm.html
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Enable scoped views and admin console"
+          git push origin HEAD:crm-admin-scope-final
