@@ -38,6 +38,13 @@ function loadUiEnhancements(){
     a.dataset.tmFollowupAgendar='1';
     document.head.appendChild(a);
   }
+  if(!document.querySelector('script[data-tm-gesture-guard]')){
+    var g=document.createElement('script');
+    g.src='gesture-navigation-guard.js?v=20260920-1148';
+    g.async=false;
+    g.dataset.tmGestureGuard='1';
+    document.head.appendChild(g);
+  }
   if(!document.querySelector('script[data-tm-ui-labels]')){
     var l=document.createElement('script');
     l.src='ui-labels.js?v=20260920-1038';
