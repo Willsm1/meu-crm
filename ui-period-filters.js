@@ -1,4 +1,4 @@
-/* Taurus Magnum CRM — filtros temporais do Dashboard/Kanban + Kanban horizontal */
+/* Taurus Magnum CRM — filtros temporais do Leads/Dashboard/Kanban + Kanban horizontal */
 (function(){
 'use strict';
 
@@ -78,8 +78,13 @@ function loadCreatedAtMap(){
   return createdAtLoading;
 }
 function rerenderActive(){
+  var l=document.getElementById('page-leads');
   var d=document.getElementById('page-dashboard');
   var k=document.getElementById('page-kanban');
+  if(l&&l.classList.contains('active')){
+    if(typeof window.renderStats==='function') window.renderStats();
+    if(typeof window.renderLeads==='function') window.renderLeads();
+  }
   if(d&&d.classList.contains('active')&&typeof window.renderDashboard==='function') window.renderDashboard();
   if(k&&k.classList.contains('active')&&typeof window.renderKanban==='function') window.renderKanban();
 }
@@ -95,15 +100,16 @@ function comLeads(rows,fn,preservarStatsLeads){
     if(preservarStatsLeads&&stats&&statsHtml!==null) stats.innerHTML=statsHtml;
   }
 }
-function selectHTML(id,handler){
+function selectHTML(id,handler,defaultValue){
   var s=document.createElement('select');
   s.id=id;
   s.style.height='34px';
-  s.innerHTML='<option value="hoje">Hoje</option><option value="semana">Últimos 7 dias</option><option value="mes" selected>Este mês</option><option value="tudo">Todo o período</option>';
+  s.innerHTML='<option value="hoje">Hoje</option><option value="semana">Últimos 7 dias</option><option value="mes">Este mês</option><option value="tudo">Todo o período</option>';
+  s.value=defaultValue||'mes';
   s.addEventListener('change',handler);
   return s;
 }
-function inserirControle(pageId,selectId,handler){
+function inserirControle(pageId,selectId,handler,defaultValue){
   var page=document.getElementById(pageId); if(!page||document.getElementById(selectId)) return;
   var cont=page.querySelector(':scope > .container')||page.querySelector('.container');
   var title=cont&&cont.querySelector(':scope > .section-title'); if(!cont||!title) return;
@@ -111,12 +117,27 @@ function inserirControle(pageId,selectId,handler){
   head.className='tm-period-head';
   cont.insertBefore(head,title);
   head.appendChild(title);
-  head.appendChild(selectHTML(selectId,handler));
+  head.appendChild(selectHTML(selectId,handler,defaultValue));
+}
+function inserirControleLeads(){
+  var page=document.getElementById('page-leads'); if(!page||document.getElementById('leads-periodo')) return;
+  var cont=page.querySelector(':scope > .container')||page.querySelector('.container'); if(!cont) return;
+  var stats=cont.querySelector('#stats')||cont.querySelector('.stats'); if(!stats) return;
+  var head=document.createElement('div');
+  head.className='tm-period-head tm-period-head-leads';
+  var spacer=document.createElement('div');
+  spacer.style.flex='1';
+  head.appendChild(spacer);
+  head.appendChild(selectHTML('leads-periodo',function(){
+    if(typeof window.renderStats==='function') window.renderStats();
+    if(typeof window.renderLeads==='function') window.renderLeads();
+  },'tudo'));
+  cont.insertBefore(head,stats);
 }
 function css(){
   if(document.getElementById('tm-period-style')) return;
   var st=document.createElement('style'); st.id='tm-period-style';
-  st.textContent='.tm-period-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:1rem}.tm-period-head .section-title{margin-bottom:0!important}#page-kanban{padding:1.5rem 16px!important}#page-kanban>.container{max-width:none!important;width:100%!important;margin:0!important}#page-kanban .kanban{display:flex!important;flex-flow:row nowrap!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;gap:10px!important;align-items:flex-start!important;grid-template-columns:none!important;padding-bottom:12px!important;-webkit-overflow-scrolling:touch}#page-kanban .k-col{flex:0 0 280px!important;min-width:280px!important;max-width:280px!important}';
+  st.textContent='.tm-period-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:1rem}.tm-period-head .section-title{margin-bottom:0!important}.tm-period-head-leads{justify-content:flex-end;margin-bottom:.75rem}#page-kanban{padding:1.5rem 16px!important}#page-kanban>.container{max-width:none!important;width:100%!important;margin:0!important}#page-kanban .kanban{display:flex!important;flex-flow:row nowrap!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;gap:10px!important;align-items:flex-start!important;grid-template-columns:none!important;padding-bottom:12px!important;-webkit-overflow-scrolling:touch}#page-kanban .k-col{flex:0 0 280px!important;min-width:280px!important;max-width:280px!important}';
   document.head.appendChild(st);
 }
 function atualizarNomeMinhaBase(){
@@ -138,11 +159,19 @@ function manterNomeMinhaBase(){
   window.__TM_SCOPE_NAME_OBSERVER__=obs;
 }
 function boot(){
-  if(typeof window.renderDashboard!=='function'||typeof window.renderKanban!=='function'){ setTimeout(boot,100); return; }
+  if(typeof window.renderStats!=='function'||typeof window.renderLeads!=='function'||typeof window.renderDashboard!=='function'||typeof window.renderKanban!=='function'){ setTimeout(boot,100); return; }
   if(window.__TM_PERIOD_FILTERS__) return;
   window.__TM_PERIOD_FILTERS__=true;
   css();
-  var rd=window.renderDashboard,rk=window.renderKanban;
+  var rs=window.renderStats,rl=window.renderLeads,rd=window.renderDashboard,rk=window.renderKanban;
+  window.renderStats=function(){
+    var base=Array.isArray(window.leads)?window.leads:[];
+    return comLeads(filtrar(base,'leads-periodo'),rs,false);
+  };
+  window.renderLeads=function(){
+    var base=Array.isArray(window.leads)?window.leads:[];
+    return comLeads(filtrar(base,'leads-periodo'),rl,false);
+  };
   window.renderDashboard=function(){
     var base=Array.isArray(window.leads)?window.leads:[];
     return comLeads(filtrar(base,'dash-periodo'),rd,true);
@@ -151,8 +180,9 @@ function boot(){
     var base=Array.isArray(window.leads)?window.leads:[];
     return comLeads(filtrar(base,'kanban-periodo'),rk,false);
   };
-  inserirControle('page-dashboard','dash-periodo',function(){ window.renderDashboard(); });
-  inserirControle('page-kanban','kanban-periodo',function(){ window.renderKanban(); });
+  inserirControleLeads();
+  inserirControle('page-dashboard','dash-periodo',function(){ window.renderDashboard(); },'mes');
+  inserirControle('page-kanban','kanban-periodo',function(){ window.renderKanban(); },'mes');
   manterNomeMinhaBase();
   var tries=0,t=setInterval(function(){ tries++; if(atualizarNomeMinhaBase()||tries>30) clearInterval(t); },200);
   loadCreatedAtMap().then(rerenderActive);
