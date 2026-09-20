@@ -33,7 +33,7 @@ function loadUiEnhancements(){
   }
   if(!document.querySelector('script[data-tm-followup-agendar]')){
     var a=document.createElement('script');
-    a.src='followup-agendar-ui.js?v=20260920-1142';
+    a.src='followup-agendar-ui.js?v=20260920-1154';
     a.async=false;
     a.dataset.tmFollowupAgendar='1';
     document.head.appendChild(a);
