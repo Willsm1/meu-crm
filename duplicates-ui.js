@@ -3,7 +3,7 @@
 'use strict';
 if(window.__TM_DUPLICATES_UI__)return; window.__TM_DUPLICATES_UI__=true;
 var groups=[],btn=null,modal=null,style=null;
-function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c];});}
+function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function val(v){return v==null||v===''?'—':String(v);}
 function fmtDate(v){if(!v)return '—';try{var d=new Date(v.length===10?v+'T12:00:00':v);return d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:v.length===10?undefined:'short'});}catch(e){return v;}}
 async function callRpc(name,args){
