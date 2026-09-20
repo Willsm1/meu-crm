@@ -1,9 +1,11 @@
-name: Patch Kanban Fullwidth
+name: Patch Kanban And Report Scope
 on:
   push:
-    branches: [kanban-fullwidth-final]
+    branches:
+      - kanban-fullwidth-final
     paths:
-      - '.github/workflows/patch-kanban-fullwidth.yml'
+      - .github/workflows/patch-kanban-fullwidth.yml
+      - tools/patch-kanban-report-scope.py
 permissions:
   contents: write
 jobs:
@@ -14,46 +16,23 @@ jobs:
         with:
           ref: kanban-fullwidth-final
           fetch-depth: 0
-      - name: Apply isolated Kanban layout patch
-        shell: bash
+      - name: Apply patch
+        run: python3 tools/patch-kanban-report-scope.py
+      - name: Validate
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('crm.html')
-          s=p.read_text()
-          old="""/* KANBAN */
-.kanban{display:flex;flex-direction:row;flex-wrap:nowrap;gap:10px;overflow-x:auto;padding-bottom:.75rem;align-items:flex-start;width:100%}
-.k-col{flex:0 0 220px;min-width:220px;background:var(--bg-card);border-radius:var(--radius-lg);border:0.5px solid var(--border);padding:10px;min-height:300px}"""
-          new="""/* KANBAN */
-#page-kanban{padding:1.5rem 16px}
-#page-kanban>.container{max-width:none;width:100%;margin:0}
-#page-kanban .kanban{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;overflow-x:visible;padding-bottom:.75rem;align-items:stretch;width:100%}
-#page-kanban .k-col{min-width:0;width:auto;background:var(--bg-card);border-radius:var(--radius-lg);border:0.5px solid var(--border);padding:10px;min-height:calc(100vh - 250px)}
-@media(max-width:1200px){
-  #page-kanban .kanban{grid-template-columns:repeat(6,minmax(200px,1fr));overflow-x:auto}
-  #page-kanban .k-col{min-width:200px}
-}"""
-          assert old in s, 'kanban baseline not found'
-          s=s.replace(old,new,1)
-          p.write_text(s)
-          print('PATCH_OK')
-          PY
-      - name: Validate isolated layout change
-        shell: bash
-        run: |
+          node --check scope-admin.js
           grep -q '#page-kanban>.container{max-width:none;width:100%;margin:0}' crm.html
           grep -q 'grid-template-columns:repeat(6,minmax(0,1fr))' crm.html
-          grep -q 'min-height:calc(100vh - 250px)' crm.html
-          grep -q '@media(max-width:1200px)' crm.html
+          grep -q "page-relatorio" scope-admin.js
+          grep -q "renderRelatorio" scope-admin.js
           git diff --check
           git diff --stat
-      - name: Commit validated product file
-        shell: bash
+      - name: Commit product files
         run: |
           git config user.name "Willsm1"
           git config user.email "willsm1@hotmail.com"
-          git add crm.html
+          git add crm.html scope-admin.js
           if ! git diff --cached --quiet; then
-            git commit -m "Expand Kanban to full viewport width"
+            git commit -m "Expand Kanban and sync report with active scope"
             git push origin kanban-fullwidth-final
           fi
