@@ -68,9 +68,17 @@ function atualizarNomeMinhaBase(){
     var sel=document.getElementById('crm-scope-select');
     if(!me||!sel) return false;
     var opt=Array.prototype.find.call(sel.options,function(o){return o.value==='mine';});
-    if(opt&&me.full_name) opt.textContent=me.full_name;
-    return true;
+    if(opt&&me.full_name&&opt.textContent!==me.full_name) opt.textContent=me.full_name;
+    return !!(opt&&me.full_name);
   }catch(e){ return false; }
+}
+function manterNomeMinhaBase(){
+  atualizarNomeMinhaBase();
+  var alvo=document.querySelector('.actionbar')||document.body;
+  if(!alvo||window.__TM_SCOPE_NAME_OBSERVER__) return;
+  var obs=new MutationObserver(function(){ atualizarNomeMinhaBase(); });
+  obs.observe(alvo,{childList:true,subtree:true});
+  window.__TM_SCOPE_NAME_OBSERVER__=obs;
 }
 function boot(){
   if(typeof window.renderDashboard!=='function'||typeof window.renderKanban!=='function'){ setTimeout(boot,100); return; }
@@ -88,6 +96,7 @@ function boot(){
   };
   inserirControle('page-dashboard','dash-periodo',function(){ window.renderDashboard(); });
   inserirControle('page-kanban','kanban-periodo',function(){ window.renderKanban(); });
+  manterNomeMinhaBase();
   var tries=0,t=setInterval(function(){ tries++; if(atualizarNomeMinhaBase()||tries>30) clearInterval(t); },200);
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else setTimeout(boot,0);
