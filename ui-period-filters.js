@@ -2,8 +2,18 @@
 (function(){
 'use strict';
 
+var createdAtMap=new Map();
+var createdAtLoading=null;
+
 function hojeISO(){
   var d=new Date();
+  var y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
+function localDateFromTimestamp(v){
+  if(!v) return '';
+  var d=new Date(v);
+  if(isNaN(d.getTime())) return String(v).slice(0,10);
   var y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');
   return y+'-'+m+'-'+day;
 }
@@ -18,13 +28,60 @@ function periodo(id){
   if(p==='mes') return {start:today.slice(0,7)+'-01',end:today,label:'Este mês'};
   return {start:'2000-01-01',end:today,label:'Todo o período'};
 }
+function dataTemporal(l){
+  var comercial=String((l&&(l.data||l.data_entrada))||'').slice(0,10);
+  if(comercial) return comercial;
+  var uuid=l&&l._uuid?String(l._uuid):'';
+  return uuid&&createdAtMap.has(uuid)?createdAtMap.get(uuid):'';
+}
 function filtrar(rows,id){
   var p=periodo(id);
   return (rows||[]).filter(function(l){
-    var d=String(l.data||l.data_entrada||'').slice(0,10);
+    var d=dataTemporal(l);
     if(!d) return p.label==='Todo o período';
     return d>=p.start&&d<=p.end;
   });
+}
+function cfg(){ return window.CRM_SUPABASE&&window.CRM_SUPABASE.config; }
+function token(){
+  var c=cfg(); if(!c) return null;
+  try{
+    var s=JSON.parse(localStorage.getItem('sb-'+c.projectRef+'-auth-token')||'null');
+    return s&&(s.access_token||(s.currentSession&&s.currentSession.access_token));
+  }catch(e){ return null; }
+}
+function loadCreatedAtMap(){
+  if(createdAtLoading) return createdAtLoading;
+  var c=cfg(),t=token();
+  if(!c||!t) return Promise.resolve(createdAtMap);
+  createdAtLoading=new Promise(function(resolve){
+    var out=new Map();
+    function page(from){
+      var h={
+        'apikey':c.publishableKey,
+        'Authorization':'Bearer '+t,
+        'Accept-Profile':c.schema||'crm',
+        'Range':String(from)+'-'+String(from+999)
+      };
+      fetch(c.url+'/rest/v1/leads?select=id,created_at&deleted_at=is.null&order=id.asc',{headers:h})
+        .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+        .then(function(rows){
+          rows=Array.isArray(rows)?rows:[];
+          rows.forEach(function(x){ if(x&&x.id&&x.created_at) out.set(String(x.id),localDateFromTimestamp(x.created_at)); });
+          if(rows.length===1000) page(from+1000);
+          else { createdAtMap=out; resolve(createdAtMap); }
+        })
+        .catch(function(){ resolve(createdAtMap); });
+    }
+    page(0);
+  }).finally(function(){ createdAtLoading=null; });
+  return createdAtLoading;
+}
+function rerenderActive(){
+  var d=document.getElementById('page-dashboard');
+  var k=document.getElementById('page-kanban');
+  if(d&&d.classList.contains('active')&&typeof window.renderDashboard==='function') window.renderDashboard();
+  if(k&&k.classList.contains('active')&&typeof window.renderKanban==='function') window.renderKanban();
 }
 function comLeads(rows,fn,preservarStatsLeads){
   var wprev=window.leads,lprev,stats=document.getElementById('stats'),statsHtml=stats&&stats.innerHTML;
@@ -98,6 +155,12 @@ function boot(){
   inserirControle('page-kanban','kanban-periodo',function(){ window.renderKanban(); });
   manterNomeMinhaBase();
   var tries=0,t=setInterval(function(){ tries++; if(atualizarNomeMinhaBase()||tries>30) clearInterval(t); },200);
+  loadCreatedAtMap().then(rerenderActive);
+  window.addEventListener('message',function(ev){
+    if(ev.source===window&&ev.data&&ev.data.type==='CRM_UPDATED'){
+      setTimeout(function(){ loadCreatedAtMap().then(rerenderActive); },900);
+    }
+  });
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else setTimeout(boot,0);
 })();
