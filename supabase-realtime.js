@@ -40,7 +40,7 @@ function loadUiEnhancements(){
   }
   if(!document.querySelector('script[data-tm-notifications]')){
     var n=document.createElement('script');
-    n.src='notifications-ui.js?v=20260920-1055';
+    n.src='notifications-ui.js?v=20260920-1134';
     n.async=false;
     n.dataset.tmNotifications='1';
     document.head.appendChild(n);
