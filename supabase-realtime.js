@@ -2,6 +2,35 @@
 (function(){
 'use strict';
 var ch=null,timer=null,lastReload=0;
+function installFollowup401Retry(){
+  if(window.__TM_FOLLOWUP_401_RETRY__)return;
+  window.__TM_FOLLOWUP_401_RETRY__=true;
+  var originalFetch=window.fetch.bind(window);
+  window.fetch=async function(input,init){
+    var url='';
+    try{url=typeof input==='string'?input:(input&&input.url)||'';}catch(e){}
+    var isFollowup=url.indexOf('/rest/v1/v_followup')>=0;
+    var first=await originalFetch(input,init);
+    if(!isFollowup||first.status!==401)return first;
+    await new Promise(function(resolve){setTimeout(resolve,700);});
+    try{
+      var token=null,cli=window.TM_SUPABASE_AUTH_CLIENT;
+      if(cli&&cli.auth&&typeof cli.auth.getSession==='function'){
+        var sessionResult=await cli.auth.getSession();
+        token=sessionResult&&sessionResult.data&&sessionResult.data.session&&sessionResult.data.session.access_token;
+      }
+      var retryInit=Object.assign({},init||{});
+      var baseHeaders=(init&&init.headers)||((typeof Request!=='undefined'&&input instanceof Request)?input.headers:undefined);
+      var headers=new Headers(baseHeaders||{});
+      if(token)headers.set('Authorization','Bearer '+token);
+      retryInit.headers=headers;
+      var retryInput=(typeof input==='string')?input:((input&&input.url)||input);
+      return await originalFetch(retryInput,retryInit);
+    }catch(e){
+      return first;
+    }
+  };
+}
 function loadUiEnhancements(){
   function add(sel,src,key){if(document.querySelector(sel))return;var s=document.createElement('script');s.src=src;s.async=false;s.dataset[key]='1';document.head.appendChild(s);}
   add('script[data-tm-scope-privacy]','scope-privacy-ui.js?v=20260920-1124','tmScopePrivacy');
@@ -27,6 +56,7 @@ function reloadSoon(forceFull){
   },140);
 }
 function start(){
+  installFollowup401Retry();
   loadUiEnhancements();
   var cli=window.TM_SUPABASE_AUTH_CLIENT;
   if(!cli||!cli.channel){setTimeout(start,300);return;}
@@ -38,5 +68,6 @@ function start(){
 }
 function fallback(){if(document.visibilityState==='visible'&&Date.now()-lastReload>5000)reloadSoon(false);}
 window.addEventListener('focus',fallback);document.addEventListener('visibilitychange',fallback);
+installFollowup401Retry();
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 })();
