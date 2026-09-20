@@ -3,6 +3,13 @@
 'use strict';
 var ch=null, timer=null, lastReload=0;
 function loadUiEnhancements(){
+  if(!document.querySelector('script[data-tm-scope-privacy]')){
+    var p=document.createElement('script');
+    p.src='scope-privacy-ui.js?v=20260920-1124';
+    p.async=false;
+    p.dataset.tmScopePrivacy='1';
+    document.head.appendChild(p);
+  }
   if(!document.querySelector('script[data-tm-period-filters]')){
     var s=document.createElement('script');
     s.src='ui-period-filters.js?v=20260920-0242';
