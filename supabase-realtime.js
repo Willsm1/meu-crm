@@ -24,6 +24,13 @@ function loadUiEnhancements(){
     f.dataset.tmFollowupSchedule='1';
     document.head.appendChild(f);
   }
+  if(!document.querySelector('script[data-tm-ui-labels]')){
+    var l=document.createElement('script');
+    l.src='ui-labels.js?v=20260920-1038';
+    l.async=false;
+    l.dataset.tmUiLabels='1';
+    document.head.appendChild(l);
+  }
 }
 function reloadSoon(){
   clearTimeout(timer);
