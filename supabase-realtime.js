@@ -19,7 +19,7 @@ function loadUiEnhancements(){
   }
   if(!document.querySelector('script[data-tm-followup-schedule]')){
     var f=document.createElement('script');
-    f.src='followup-schedule-ui.js?v=20260920-1103';
+    f.src='followup-schedule-ui.js?v=20260920-1120';
     f.async=false;
     f.dataset.tmFollowupSchedule='1';
     document.head.appendChild(f);
