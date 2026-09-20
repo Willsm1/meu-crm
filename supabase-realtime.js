@@ -19,7 +19,7 @@ function loadUiEnhancements(){
   }
   if(!document.querySelector('script[data-tm-followup-schedule]')){
     var f=document.createElement('script');
-    f.src='followup-schedule-ui.js?v=20260920-0310';
+    f.src='followup-schedule-ui.js?v=20260920-1055';
     f.async=false;
     f.dataset.tmFollowupSchedule='1';
     document.head.appendChild(f);
@@ -30,6 +30,13 @@ function loadUiEnhancements(){
     l.async=false;
     l.dataset.tmUiLabels='1';
     document.head.appendChild(l);
+  }
+  if(!document.querySelector('script[data-tm-notifications]')){
+    var n=document.createElement('script');
+    n.src='notifications-ui.js?v=20260920-1055';
+    n.async=false;
+    n.dataset.tmNotifications='1';
+    document.head.appendChild(n);
   }
 }
 function reloadSoon(){
