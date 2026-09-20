@@ -1,91 +1,42 @@
 /* Taurus Magnum CRM — realtime sync layer */
 (function(){
 'use strict';
-var ch=null, timer=null, lastReload=0;
+var ch=null,timer=null,lastReload=0;
 function loadUiEnhancements(){
-  if(!document.querySelector('script[data-tm-scope-privacy]')){
-    var p=document.createElement('script');
-    p.src='scope-privacy-ui.js?v=20260920-1124';
-    p.async=false;
-    p.dataset.tmScopePrivacy='1';
-    document.head.appendChild(p);
-  }
-  if(!document.querySelector('script[data-tm-period-filters]')){
-    var s=document.createElement('script');
-    s.src='ui-period-filters.js?v=20260920-0242';
-    s.async=false;
-    s.dataset.tmPeriodFilters='1';
-    document.head.appendChild(s);
-  }
-  if(!document.querySelector('script[data-tm-sales-date]')){
-    var d=document.createElement('script');
-    d.src='sales-date.js?v=20260920-0255';
-    d.async=false;
-    d.dataset.tmSalesDate='1';
-    document.head.appendChild(d);
-  }
-  if(!document.querySelector('script[data-tm-followup-schedule]')){
-    var f=document.createElement('script');
-    f.src='followup-schedule-ui.js?v=20260920-1132';
-    f.async=false;
-    f.dataset.tmFollowupSchedule='1';
-    document.head.appendChild(f);
-  }
-  if(!document.querySelector('script[data-tm-followup-agendar]')){
-    var a=document.createElement('script');
-    a.src='followup-agendar-ui.js?v=20260920-1154';
-    a.async=false;
-    a.dataset.tmFollowupAgendar='1';
-    document.head.appendChild(a);
-  }
-  if(!document.querySelector('script[data-tm-gesture-guard]')){
-    var g=document.createElement('script');
-    g.src='gesture-navigation-guard.js?v=20260920-1148';
-    g.async=false;
-    g.dataset.tmGestureGuard='1';
-    document.head.appendChild(g);
-  }
-  if(!document.querySelector('script[data-tm-ui-labels]')){
-    var l=document.createElement('script');
-    l.src='ui-labels.js?v=20260920-1038';
-    l.async=false;
-    l.dataset.tmUiLabels='1';
-    document.head.appendChild(l);
-  }
-  if(!document.querySelector('script[data-tm-notifications]')){
-    var n=document.createElement('script');
-    n.src='notifications-ui.js?v=20260920-1134';
-    n.async=false;
-    n.dataset.tmNotifications='1';
-    document.head.appendChild(n);
-  }
+  function add(sel,src,key){if(document.querySelector(sel))return;var s=document.createElement('script');s.src=src;s.async=false;s.dataset[key]='1';document.head.appendChild(s);}
+  add('script[data-tm-scope-privacy]','scope-privacy-ui.js?v=20260920-1124','tmScopePrivacy');
+  add('script[data-tm-period-filters]','ui-period-filters.js?v=20260920-0242','tmPeriodFilters');
+  add('script[data-tm-sales-date]','sales-date.js?v=20260920-0255','tmSalesDate');
+  add('script[data-tm-followup-schedule]','followup-schedule-ui.js?v=20260920-1455','tmFollowupSchedule');
+  add('script[data-tm-followup-agendar]','followup-agendar-ui.js?v=20260920-1455','tmFollowupAgendar');
+  add('script[data-tm-gesture-guard]','gesture-navigation-guard.js?v=20260920-1148','tmGestureGuard');
+  add('script[data-tm-ui-labels]','ui-labels.js?v=20260920-1038','tmUiLabels');
+  add('script[data-tm-notifications]','notifications-ui.js?v=20260920-1134','tmNotifications');
 }
-function reloadSoon(){
+function followupAtivo(){var p=document.getElementById('page-followup');return !!(p&&p.classList.contains('active'));}
+function reloadSoon(forceFull){
   clearTimeout(timer);
   timer=setTimeout(function(){
-    if(!window.CRM_CANONICAL || !window.CRM_CANONICAL.reload) return;
     lastReload=Date.now();
-    window.CRM_CANONICAL.reload().catch(function(e){
-      try{ console.warn('[CRM REALTIME] reload falhou:',e&&e.message||e); }catch(_){}
-    });
-  },350);
+    if(!forceFull&&followupAtivo()&&window.CRM_FOLLOWUP&&typeof window.CRM_FOLLOWUP.carregar==='function'){
+      Promise.resolve(window.CRM_FOLLOWUP.carregar()).catch(function(e){try{console.warn('[CRM REALTIME] follow-up:',e&&e.message||e);}catch(_){}});
+      return;
+    }
+    if(!window.CRM_CANONICAL||!window.CRM_CANONICAL.reload)return;
+    window.CRM_CANONICAL.reload().catch(function(e){try{console.warn('[CRM REALTIME] reload:',e&&e.message||e);}catch(_){}});
+  },140);
 }
 function start(){
   loadUiEnhancements();
   var cli=window.TM_SUPABASE_AUTH_CLIENT;
-  if(!cli || !cli.channel){ setTimeout(start,300); return; }
-  if(ch) return;
+  if(!cli||!cli.channel){setTimeout(start,300);return;}
+  if(ch)return;
   ch=cli.channel('tm-crm-sync')
-    .on('postgres_changes',{event:'*',schema:'crm',table:'leads'},reloadSoon)
-    .on('postgres_changes',{event:'*',schema:'crm',table:'lead_assignments'},reloadSoon)
-    .subscribe(function(status){
-      try{ console.info('[CRM REALTIME]',status); }catch(_){}
-    });
+    .on('postgres_changes',{event:'*',schema:'crm',table:'leads'},function(){reloadSoon(false);})
+    .on('postgres_changes',{event:'*',schema:'crm',table:'lead_assignments'},function(){reloadSoon(true);})
+    .subscribe(function(status){try{console.info('[CRM REALTIME]',status);}catch(_){}});
 }
-function fallback(){
-  if(document.visibilityState==='visible' && Date.now()-lastReload>5000) reloadSoon();
-}
-window.addEventListener('focus',fallback);
-document.addEventListener('visibilitychange',fallback);
-if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start); else start();
+function fallback(){if(document.visibilityState==='visible'&&Date.now()-lastReload>5000)reloadSoon(false);}
+window.addEventListener('focus',fallback);document.addEventListener('visibilitychange',fallback);
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 })();
