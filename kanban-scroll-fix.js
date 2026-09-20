@@ -1,4 +1,4 @@
-/* Taurus Magnum CRM — horizontal scroll normalization + Follow-up wide layout */
+/* Taurus Magnum CRM — Kanban horizontal scroll + Follow-up responsive layout */
 (function(){
 'use strict';
 if(window.__TM_KANBAN_SCROLL_FIX__)return;
@@ -31,22 +31,27 @@ function installFollowupLayout(){
     st.textContent=[
       '#page-followup{padding-left:8px!important;padding-right:8px!important}',
       '#page-followup>.container{max-width:none!important;width:100%!important;margin:0!important}',
-      '#page-followup .tm-followup-scroll{overflow-x:auto!important;overflow-y:visible!important;overscroll-behavior-x:contain;scrollbar-gutter:stable;padding-right:2px}',
-      '#page-followup .tm-followup-scroll>table{width:100%!important;min-width:1280px!important;table-layout:fixed!important}',
-      '#page-followup .tm-followup-scroll th:nth-child(1){width:17%!important}',
+      '#page-followup .tm-followup-scroll{overflow:visible!important;padding-right:0!important}',
+      '#page-followup .tm-followup-scroll>table{width:100%!important;min-width:0!important;table-layout:fixed!important}',
+      '#page-followup .tm-followup-scroll th:nth-child(1){width:18%!important}',
       '#page-followup .tm-followup-scroll th:nth-child(2){width:10%!important}',
-      '#page-followup .tm-followup-scroll th:nth-child(3){width:9%!important}',
+      '#page-followup .tm-followup-scroll th:nth-child(3){width:10%!important}',
       '#page-followup .tm-followup-scroll th:nth-child(4){width:7%!important}',
       '#page-followup .tm-followup-scroll th:nth-child(5){width:7%!important}',
-      '#page-followup .tm-followup-scroll th:nth-child(6){width:9%!important}',
+      '#page-followup .tm-followup-scroll th:nth-child(6){width:10%!important}',
       '#page-followup .tm-followup-scroll th:nth-child(7){width:6%!important}',
-      '#page-followup .tm-followup-scroll th:nth-child(8){width:9%!important}',
+      '#page-followup .tm-followup-scroll th:nth-child(8){width:10%!important}',
       '#page-followup .tm-followup-scroll th:nth-child(9){width:9%!important}',
-      '#page-followup .tm-followup-scroll th:nth-child(10){width:17%!important}',
-      '#page-followup .tm-followup-scroll td:nth-child(10){min-width:210px!important;padding-right:14px!important}',
-      '#page-followup .tm-action-cell{overflow:visible!important}',
-      '@media(max-width:1100px){#page-followup .tm-followup-scroll>table{min-width:1280px!important}}',
-      '@media(max-width:900px){#page-followup{padding-left:6px!important;padding-right:6px!important}}'
+      '#page-followup .tm-followup-scroll th:nth-child(10){width:13%!important}',
+      '#page-followup .tm-followup-scroll td{padding-left:10px!important;padding-right:10px!important}',
+      '#page-followup .tm-followup-scroll th{padding-left:10px!important;padding-right:10px!important}',
+      '#page-followup .tm-followup-scroll td:nth-child(10){min-width:0!important;padding-right:8px!important}',
+      '#page-followup .tm-action-cell{overflow:visible!important;gap:5px!important}',
+      '#page-followup .tm-agendar-btn{min-width:76px!important;height:28px!important;padding:0 8px!important;font-size:10px!important}',
+      '#page-followup .tm-countdown-badge{min-width:34px!important;height:28px!important;padding:0 6px!important;font-size:9px!important}',
+      '#page-followup .tm-task-state{width:27px!important;height:27px!important;font-size:14px!important;border-radius:8px!important}',
+      '@media(max-width:1200px){#page-followup .tm-followup-scroll td,#page-followup .tm-followup-scroll th{padding-left:8px!important;padding-right:8px!important}#page-followup .tm-followup-scroll th:nth-child(1){width:19%!important}#page-followup .tm-followup-scroll th:nth-child(2){width:9%!important}#page-followup .tm-followup-scroll th:nth-child(3){width:10%!important}#page-followup .tm-followup-scroll th:nth-child(6){width:9%!important}#page-followup .tm-followup-scroll th:nth-child(10){width:14%!important}#page-followup .tm-agendar-btn{min-width:70px!important;padding:0 6px!important}#page-followup .tm-action-cell{gap:4px!important}}',
+      '@media(max-width:900px){#page-followup{padding-left:6px!important;padding-right:6px!important}#page-followup .tm-followup-scroll td,#page-followup .tm-followup-scroll th{font-size:11px!important;padding-left:6px!important;padding-right:6px!important}#page-followup .tm-fu-chip{padding-left:7px!important;padding-right:7px!important;font-size:10px!important}}'
     ].join('\n');
     document.head.appendChild(st);
   }
@@ -55,7 +60,7 @@ function installFollowupLayout(){
   var wrap=table&&table.parentElement;
   if(wrap){
     wrap.classList.add('tm-followup-scroll');
-    normalizeWheel(wrap,'tmFollowupScroll');
+    try{wrap.style.overflowX='visible';}catch(e){}
   }
 }
 
