@@ -1,0 +1,68 @@
+name: Patch Copy Contact
+on:
+  push:
+    branches: [copy-contact]
+    paths:
+      - 'tools/copy_contact_trigger.txt'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: copy-contact
+      - name: Apply isolated contact copy patch
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('crm.html')
+          s=p.read_text()
+          anchor="function cleanPhone(p){return (p||'').toString().replace(/\\D/g,'')}"
+          helper=r'''function copiarContato(el,ev){
+            try{ if(ev) ev.stopPropagation(); }catch(e){}
+            if(!el) return;
+            let tel='';
+            try{ tel=decodeURIComponent(el.dataset.phone||''); }catch(e){ tel=el.dataset.phone||''; }
+            tel=String(tel||'').trim(); if(!tel) return;
+            const copiarFallback=()=>{
+              const ta=document.createElement('textarea'); ta.value=tel; ta.setAttribute('readonly','');
+              ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select();
+              try{ document.execCommand('copy'); }finally{ ta.remove(); }
+            };
+            const feito=()=>{
+              const anterior=el.textContent; el.textContent='Copiado'; el.style.color='#86efac';
+              setTimeout(()=>{ el.textContent=anterior; el.style.color=''; },1100);
+            };
+            try{
+              if(navigator.clipboard && window.isSecureContext){ navigator.clipboard.writeText(tel).then(feito).catch(()=>{copiarFallback();feito();}); }
+              else { copiarFallback(); feito(); }
+            }catch(e){ copiarFallback(); feito(); }
+          }'''
+          if 'function copiarContato(el,ev)' not in s:
+              if s.count(anchor)!=1: raise SystemExit('anchor cleanPhone count != 1')
+              s=s.replace(anchor,anchor+'\n'+helper,1)
+          old='''    <td style="font-size:12px;color:var(--text-muted)">${l.email?`<div>${l.email}</div>`:''} ${l.telefone?`<div>${l.telefone}</div>`:''}</td>'''
+          new='''    <td style="font-size:12px;color:var(--text-muted)">${l.email?`<div>${l.email}</div>`:''} ${l.telefone?`<div class="contact-copy" data-phone="${encodeURIComponent(l.telefone)}" onclick="copiarContato(this,event)" title="Clique para copiar" style="cursor:pointer;display:inline-block;transition:color .15s">${l.telefone}</div>`:''}</td>'''
+          if old not in s: raise SystemExit('contact renderer anchor missing')
+          if s.count(old)!=1: raise SystemExit('contact renderer count != 1')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          print('PATCH_OK')
+      - name: Validate invariants
+        run: |
+          grep -q 'function copiarContato(el,ev)' crm.html
+          grep -q 'title="Clique para copiar"' crm.html
+          grep -q 'data-phone="${encodeURIComponent(l.telefone)}"' crm.html
+          ! grep -q 'wa.me' crm.html || true
+          git diff --check
+          test "$(git diff --name-only | wc -l | tr -d ' ')" = "1"
+          test "$(git diff --name-only)" = "crm.html"
+      - name: Commit validated change
+        run: |
+          git config user.name 'Willsm1'
+          git config user.email 'willsm1@hotmail.com'
+          git add crm.html
+          git commit -m 'Make lead contact numbers click-to-copy'
+          git push origin HEAD:copy-contact
