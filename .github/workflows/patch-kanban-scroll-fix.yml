@@ -1,0 +1,50 @@
+name: Patch Kanban Scroll Fix
+on:
+  push:
+    branches: [kanban-scroll-fix]
+    paths:
+      - '.github/workflows/patch-kanban-scroll-fix.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: kanban-scroll-fix
+          fetch-depth: 0
+      - name: Apply isolated Kanban scroll fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('crm.html')
+          s=p.read_text()
+          old="#page-kanban .kanban{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;overflow-x:visible;padding-bottom:.75rem;align-items:stretch;width:100%}"
+          new="#page-kanban .kanban{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;overflow-x:auto;padding-bottom:.75rem;align-items:stretch;width:100%;overscroll-behavior-x:contain}"
+          assert old in s, 'desktop Kanban baseline not found'
+          s=s.replace(old,new,1)
+          old2="#page-kanban .kanban{grid-template-columns:repeat(6,minmax(200px,1fr));overflow-x:auto}"
+          new2="#page-kanban .kanban{grid-template-columns:repeat(7,minmax(200px,1fr));overflow-x:auto}"
+          assert old2 in s, 'responsive Kanban baseline not found'
+          s=s.replace(old2,new2,1)
+          p.write_text(s)
+          print('PATCH_OK')
+          PY
+      - name: Validate
+        run: |
+          grep -q 'grid-template-columns:repeat(7,minmax(0,1fr))' crm.html
+          grep -q 'overflow-x:auto' crm.html
+          grep -q 'repeat(7,minmax(200px,1fr))' crm.html
+          ! grep -q 'repeat(6,minmax(0,1fr))' crm.html
+          git diff --check
+          git diff --stat
+      - name: Commit product file
+        run: |
+          git config user.name "Willsm1"
+          git config user.email "willsm1@hotmail.com"
+          git add crm.html
+          if ! git diff --cached --quiet; then
+            git commit -m "Fix Kanban seven-column scrolling"
+            git push origin kanban-scroll-fix
+          fi
