@@ -2,6 +2,14 @@
 (function(){
 'use strict';
 var ch=null, timer=null, lastReload=0;
+function loadUiEnhancements(){
+  if(document.querySelector('script[data-tm-period-filters]')) return;
+  var s=document.createElement('script');
+  s.src='ui-period-filters.js?v=20260920-0205';
+  s.async=false;
+  s.dataset.tmPeriodFilters='1';
+  document.head.appendChild(s);
+}
 function reloadSoon(){
   clearTimeout(timer);
   timer=setTimeout(function(){
@@ -13,6 +21,7 @@ function reloadSoon(){
   },350);
 }
 function start(){
+  loadUiEnhancements();
   var cli=window.TM_SUPABASE_AUTH_CLIENT;
   if(!cli || !cli.channel){ setTimeout(start,300); return; }
   if(ch) return;
