@@ -2,7 +2,15 @@
 (function(){
 'use strict';
 var ch=null, timer=null, lastReload=0;
+function primeFollowup(){
+  if(document.getElementById('tm-fu-boot-hide')) return;
+  var st=document.createElement('style');
+  st.id='tm-fu-boot-hide';
+  st.textContent='#fu-tbody{visibility:hidden!important}';
+  document.head.appendChild(st);
+}
 function loadUiEnhancements(){
+  primeFollowup();
   if(!document.querySelector('script[data-tm-scope-privacy]')){
     var p=document.createElement('script');
     p.src='scope-privacy-ui.js?v=20260920-1124';
@@ -24,19 +32,12 @@ function loadUiEnhancements(){
     d.dataset.tmSalesDate='1';
     document.head.appendChild(d);
   }
-  if(!document.querySelector('script[data-tm-followup-schedule]')){
+  if(!document.querySelector('script[data-tm-followup-stable]')){
     var f=document.createElement('script');
-    f.src='followup-schedule-ui.js?v=20260920-1132';
+    f.src='followup-stable-ui.js?v=20260920-1154';
     f.async=false;
-    f.dataset.tmFollowupSchedule='1';
+    f.dataset.tmFollowupStable='1';
     document.head.appendChild(f);
-  }
-  if(!document.querySelector('script[data-tm-followup-agendar]')){
-    var a=document.createElement('script');
-    a.src='followup-agendar-ui.js?v=20260920-1142';
-    a.async=false;
-    a.dataset.tmFollowupAgendar='1';
-    document.head.appendChild(a);
   }
   if(!document.querySelector('script[data-tm-gesture-guard]')){
     var g=document.createElement('script');
@@ -87,5 +88,6 @@ function fallback(){
 }
 window.addEventListener('focus',fallback);
 document.addEventListener('visibilitychange',fallback);
+primeFollowup();
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start); else start();
 })();
