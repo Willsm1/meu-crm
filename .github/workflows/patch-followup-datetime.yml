@@ -1,0 +1,28 @@
+name: Patch Follow-up Datetime
+on:
+  push:
+    branches: [followup-datetime-performance]
+    paths:
+      - 'tools/patch_followup_datetime.py'
+      - '.github/workflows/patch-followup-datetime.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: followup-datetime-performance
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: python tools/patch_followup_datetime.py
+      - run: |
+          if git diff --quiet -- crm.html; then exit 0; fi
+          git config user.name 'Taurus Magnum Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add crm.html
+          git commit -m 'Bust follow-up datetime asset cache'
+          git push origin HEAD:followup-datetime-performance
