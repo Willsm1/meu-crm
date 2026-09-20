@@ -1,0 +1,108 @@
+name: Freeze native follow-up once
+on:
+  push:
+    branches: [freeze-followup-native]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: freeze-followup-native
+      - name: Make selected follow-up UI native
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p=Path('crm.html')
+          s=p.read_text()
+
+          old_chip="hoje:['#fcd34d','rgba(252,211,77,.15)','Hoje'],"
+          new_chip="hoje:['#fcd34d','rgba(252,211,77,.15)','Vence hoje'],\n         concluido:['#86efac','rgba(34,197,94,.15)','Concluído'],"
+          if old_chip not in s:
+              raise SystemExit('chip Hoje não encontrado')
+          s=s.replace(old_chip,new_chip,1)
+
+          old_proximo="""      + '<td style=\"font-size:12px\">'+_dt(x.proximo_contato)\n        + (x.dias_vencido>0?'<div style=\"font-size:10px;color:#fca5a5\">Vencido há '+x.dias_vencido+'d</div>':(x.dias_vencido===0?'<div style=\"font-size:10px;color:#fcd34d\">Hoje</div>':(x.dias_vencido<0?'<div style=\"font-size:10px;color:#93c5fd\">Faltam '+Math.abs(x.dias_vencido)+'d</div>':'')))+'</td>'\n"""
+          new_proximo="""      + '<td style=\"font-size:12px\">'+_dt(x.proximo_contato)\n        + ((x.tarefa_concluida||x.prioridade==='concluido')\n            ? '<div style=\"font-size:10px;color:#86efac;font-weight:700\">Concluído ✓</div>'\n            : (x.dias_vencido>0?'<div style=\"font-size:10px;color:#fca5a5\">Vencido há '+x.dias_vencido+'d</div>':(x.dias_vencido===0?'<div style=\"font-size:10px;color:#fcd34d\">Hoje</div>':(x.dias_vencido<0?'<div style=\"font-size:10px;color:#93c5fd\">Faltam '+Math.abs(x.dias_vencido)+'d</div>':''))))+'</td>'\n"""
+          if old_proximo not in s:
+              raise SystemExit('bloco Próximo não encontrado')
+          s=s.replace(old_proximo,new_proximo,1)
+
+          pat=re.compile(r'''      \+ '<td style="white-space:nowrap">'\n        \+ '<input type="date" id="fu-d-'\+id\+'" style="height:28px;font-size:11px;width:120px">'\n        \+ '<button class="btn" style="height:28px;font-size:11px;padding:0 9px;margin-left:5px" '\n        \+   'onclick="fuAgendar\\\('' \+ id \+ ''\\\)">Agendar</button>'\n        \+ '<button class="btn btn-primary" style="height:28px;font-size:11px;padding:0 9px;margin-left:5px" '\n        \+   'onclick="fuFeito\\\('' \+ id \+ ''\\\)">Feito</button>'\n      \+ '</td></tr>';''')
+          repl="""      + '<td style=\"white-space:nowrap;overflow:visible\">'\n        + '<div style=\"display:flex;align-items:center;gap:7px;overflow:visible\">'\n        + '<input type=\"date\" id=\"fu-d-'+id+'\" value=\"'+_esc(String(x.proximo_contato||'').slice(0,10))+'\" style=\"display:none\">'\n        + '<button class=\"btn\" style=\"height:30px;font-size:11px;padding:0 11px\" onclick=\"tmFuAbrirAgenda(this,\\\''+id+'\\\')\">'+(x.proximo_contato?'Reagendar':'Agendar')+'</button>'\n        + ((x.proximo_contato && !(x.tarefa_concluida||x.prioridade==='concluido'))\n            ? '<span title=\"Contagem para a tarefa\" style=\"display:inline-flex;align-items:center;justify-content:center;min-width:38px;height:30px;padding:0 7px;border-radius:6px 10px 10px 6px;background:rgba(239,68,68,.18);border:1px solid rgba(248,113,113,.5);color:#fecaca;font-size:10px;font-weight:800\">'+(x.dias_vencido<0?Math.abs(x.dias_vencido)+'d':(x.dias_vencido===0?'Hoje':'Venc.'))+'</span>'\n            : '')\n        + (x.proximo_contato\n            ? ((x.tarefa_concluida||x.prioridade==='concluido')\n                ? '<span title=\"Tarefa concluída automaticamente por atividade registrada\" style=\"display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;background:rgba(34,197,94,.16);border:1px solid rgba(34,197,94,.45);color:#86efac;font-size:16px;font-weight:900\">✓</span>'\n                : '<span title=\"'+(x.dias_vencido>0?'Tarefa vencida sem atividade registrada':'Aguardando atividade na data agendada')+'\" style=\"display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;background:'+(x.dias_vencido>0?'rgba(239,68,68,.18)':'#111b2d')+';border:1px solid '+(x.dias_vencido>0?'rgba(239,68,68,.48)':'rgba(148,163,184,.28)')+';color:'+(x.dias_vencido>0?'#fca5a5':'#94a3b8')+';font-size:16px;font-weight:900\">'+(x.dias_vencido>0?'!':'○')+'</span>')\n            : '')\n        + '</div></td></tr>';"""
+          s2,n=pat.subn(repl,s,count=1)
+          if n!=1:
+              raise SystemExit(f'bloco Ação substituído {n} vez(es)')
+          s=s2
+
+          marker="function fuAgendar(leadId){"
+          if marker not in s:
+              raise SystemExit('fuAgendar não encontrado')
+          helper=r'''var _fuAgendaPop=null;
+function _fuFecharAgenda(){ if(_fuAgendaPop&&_fuAgendaPop.parentNode)_fuAgendaPop.remove(); _fuAgendaPop=null; }
+function tmFuAbrirAgenda(btn, leadId){
+  _fuFecharAgenda();
+  var inp=document.getElementById('fu-d-'+leadId);
+  var base=(inp&&inp.value)?new Date(inp.value+'T12:00:00'):new Date();
+  var y=base.getFullYear(), m=base.getMonth();
+  var pop=document.createElement('div'); _fuAgendaPop=pop;
+  pop.style.cssText='position:fixed;z-index:10000;width:286px;background:#0e1628;border:1px solid rgba(59,130,246,.35);border-radius:14px;box-shadow:0 18px 55px rgba(0,0,0,.55);padding:12px';
+  document.body.appendChild(pop);
+  function pad(n){return String(n).padStart(2,'0');}
+  function desenhar(){
+    var meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    var first=new Date(y,m,1), days=new Date(y,m+1,0).getDate(), start=first.getDay();
+    var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><button data-nav="-1" style="width:28px;height:28px;border:1px solid rgba(148,163,184,.22);background:#111b2d;color:#94a3b8;border-radius:8px;cursor:pointer">‹</button><div style="font-size:13px;font-weight:800;color:#e2e8f0">'+meses[m]+' '+y+'</div><button data-nav="1" style="width:28px;height:28px;border:1px solid rgba(148,163,184,.22);background:#111b2d;color:#94a3b8;border-radius:8px;cursor:pointer">›</button></div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px">';
+    ['D','S','T','Q','Q','S','S'].forEach(function(x){h+='<div style="font-size:9px;color:#64748b;text-align:center;padding:2px 0 4px">'+x+'</div>';});
+    for(var i=0;i<start;i++)h+='<div style="height:32px"></div>';
+    var now=new Date(), hoje=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    for(var d=1;d<=days;d++){
+      var dt=new Date(y,m,d), dis=dt<hoje;
+      h+='<button data-day="'+d+'" '+(dis?'disabled':'')+' style="height:32px;border-radius:8px;border:1px solid rgba(59,130,246,.12);background:#111d31;color:#cbd5e1;font-size:11px;font-weight:700;cursor:'+(dis?'not-allowed':'pointer')+';opacity:'+(dis?'.25':'1')+'">'+d+'</button>';
+    }
+    h+='</div><div style="font-size:10px;color:#64748b;margin-top:9px;text-align:center">Selecione o dia — salva automaticamente.</div>';
+    pop.innerHTML=h;
+    pop.querySelectorAll('[data-nav]').forEach(function(b){b.onclick=function(e){e.stopPropagation();m+=Number(b.dataset.nav);if(m<0){m=11;y--;}if(m>11){m=0;y++;}desenhar();};});
+    pop.querySelectorAll('[data-day]').forEach(function(b){b.onclick=function(e){e.stopPropagation();if(!inp)return;inp.value=y+'-'+pad(m+1)+'-'+pad(Number(b.dataset.day));_fuFecharAgenda();fuAgendar(leadId);};});
+  }
+  desenhar();
+  var r=btn.getBoundingClientRect();
+  pop.style.left=Math.max(12,Math.min(window.innerWidth-298,r.left))+'px';
+  pop.style.top=Math.max(12,Math.min(window.innerHeight-360,r.bottom+8))+'px';
+  setTimeout(function(){document.addEventListener('click',function fecha(e){if(_fuAgendaPop&&!_fuAgendaPop.contains(e.target)&&e.target!==btn){_fuFecharAgenda();document.removeEventListener('click',fecha);}},true);},0);
+}
+
+'''
+          s=s.replace(marker,helper+marker,1)
+
+          old_scripts='''<script src="followup-schedule-ui.js?v=20260920-1228" data-tm-followup-schedule="1"></script>\n<script src="followup-agendar-ui.js?v=20260920-1228" data-tm-followup-agendar="1"></script>\n<script src="supabase-realtime.js?v=20260920-1228"></script>'''
+          new_scripts='<script src="supabase-realtime.js?v=20260920-1239"></script>'
+          if old_scripts not in s:
+              raise SystemExit('scripts Follow-up diretos não encontrados')
+          s=s.replace(old_scripts,new_scripts,1)
+
+          p.write_text(s)
+
+          q=Path('supabase-realtime.js')
+          r=q.read_text()
+          for key in ('followup-schedule','followup-agendar'):
+              pattern=re.compile(r"\n  if\(!document\.querySelector\('script\[data-tm-"+re.escape(key)+r"\]'\)\)\{.*?\n  \}",re.S)
+              r2,n=pattern.subn('',r,count=1)
+              if n!=1:
+                  raise SystemExit(f'loader {key} removido {n} vez(es)')
+              r=r2
+          q.write_text(r)
+          PY
+      - name: Commit native follow-up
+        run: |
+          if git diff --quiet -- crm.html supabase-realtime.js; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crm.html supabase-realtime.js
+          git commit -m 'Freeze selected follow-up UI natively'
+          git push origin HEAD:freeze-followup-native
