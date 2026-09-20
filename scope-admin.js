@@ -3,7 +3,7 @@
 'use strict';
 var allRows=[];
 var visibleSnap=new Map();
-var ctx={me:null,options:[],assignments:new Map(),teams:new Map()};
+var ctx={me:null,options:[],assignments:new Map(),teams:new Map(),users:new Map()};
 var scopeInitialized=false;
 var scope={type:'mine',id:null};
 var rawReload=null, rawRefresh=null;
@@ -18,6 +18,18 @@ function hdr(){ var c=cfg(),t=tok(); return c&&t?{'apikey':c.publishableKey,'Aut
 function rpc(n,b){ return window.CRM_CANONICAL.rpc(n,b||{}); }
 function get(path){ var c=cfg(),h=hdr(); if(!c||!h) return Promise.reject(new Error('Sessão ausente')); return fetch(c.url+'/rest/v1/'+path,{headers:h}).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); }
 function getRange(path,from,to){ var c=cfg(),h=hdr(); if(!c||!h) return Promise.reject(new Error('Sessão ausente')); var hh=Object.assign({},h,{'Range':String(from)+'-'+String(to),'Prefer':'count=exact'}); return fetch(c.url+'/rest/v1/'+path,{headers:hh}).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); }
+function loadAllAssignments(){
+  var path='lead_assignments?select=lead_id,user_id,team_id&unassigned_at=is.null&order=lead_id.asc';
+  var out=[];
+  function page(from){
+    return getRange(path,from,from+999).then(function(rows){
+      rows=Array.isArray(rows)?rows:[];
+      out=out.concat(rows);
+      return rows.length===1000?page(from+1000):out;
+    });
+  }
+  return page(0);
+}
 function mapLeadRow(l){ return {id:String(l.local_id||l.id),_uuid:l.id,nome:l.nome||'',empresa:l.empresa||'',email:l.email||'',telefone:l.telefone||'',status:l.status||'Novo',valor:(l.valor===null||l.valor===undefined)?'':l.valor,data:l.data_entrada||'',data_entrada:l.data_entrada||'',origem:l.origem||'',perfil:l.perfil||'',regiao:l.regiao||'',ult_meu:l.ult_meu||'',ult_dele:l.ult_dele||'',notas:l.notas||'',proximo_contato:l.proximo_contato||''}; }
 function loadAllLeads(){
   var cols='id,local_id,nome,telefone,email,empresa,status,valor,perfil,regiao,origem,data_entrada,ult_meu,ult_dele,notas,proximo_contato';
@@ -37,12 +49,16 @@ function loadContext(){
   return Promise.all([
     rpc('current_profile_context',{}),
     rpc('admin_scope_options',{}),
-    get('lead_assignments?select=lead_id,user_id,team_id&unassigned_at=is.null&limit=5000')
+    loadAllAssignments()
   ]).then(function(r){
     ctx.me=Array.isArray(r[0])?r[0][0]:r[0];
     ctx.options=Array.isArray(r[1])?r[1]:[];
     ctx.teams=new Map();
-    ctx.options.forEach(function(p){ if(p.team_id&&p.team_name) ctx.teams.set(String(p.team_id),p.team_name); });
+    ctx.users=new Map();
+    ctx.options.forEach(function(p){
+      if(p.team_id&&p.team_name) ctx.teams.set(String(p.team_id),p.team_name);
+      if(p.user_id&&p.full_name) ctx.users.set(String(p.user_id),p.full_name);
+    });
     ctx.assignments=new Map();
     (Array.isArray(r[2])?r[2]:[]).forEach(function(a){ ctx.assignments.set(String(a.lead_id),a); });
     restoreScope();
@@ -78,7 +94,15 @@ function applyScope(){
   return rows;
 }
 function annotate(rows){
-  return (rows||[]).map(function(l){ var a=ownerOf(l),tid=a&&a.team_id||null; l._owner_id=a&&a.user_id||null; l._team_id=tid; l._team_name=tid?(ctx.teams.get(String(tid))||''):''; l.empresa=l._team_name||''; return l; });
+  return (rows||[]).map(function(l){
+    var a=ownerOf(l),tid=a&&a.team_id||null,uid=a&&a.user_id||null;
+    l._owner_id=uid;
+    l._team_id=tid;
+    l._team_name=tid?(ctx.teams.get(String(tid))||''):'';
+    l.responsavel=uid?(ctx.users.get(String(uid))||''):'';
+    l.empresa=l._team_name||'';
+    return l;
+  });
 }
 function scopedReload(){
   return loadContext().then(function(){ return loadAllLeads(); }).then(function(rows){ allRows=annotate(rows||[]); return applyScope(); });
