@@ -1,0 +1,24 @@
+name: Validate Follow-up Datetime
+on:
+  push:
+    branches: [followup-datetime-performance]
+    paths:
+      - '.github/workflows/validate-followup-datetime.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: followup-datetime-performance
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node --check followup-schedule-ui.js
+      - run: node --check followup-agendar-ui.js
+      - run: node --check supabase-realtime.js
+      - run: grep -q 'followup-schedule-ui.js?v=20260920-1455' crm.html
+      - run: grep -q 'followup-agendar-ui.js?v=20260920-1455' crm.html
+      - run: grep -q 'supabase-realtime.js?v=20260920-1455' crm.html
