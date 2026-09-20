@@ -17,6 +17,13 @@ function loadUiEnhancements(){
     d.dataset.tmSalesDate='1';
     document.head.appendChild(d);
   }
+  if(!document.querySelector('script[data-tm-followup-schedule]')){
+    var f=document.createElement('script');
+    f.src='followup-schedule-ui.js?v=20260920-0310';
+    f.async=false;
+    f.dataset.tmFollowupSchedule='1';
+    document.head.appendChild(f);
+  }
 }
 function reloadSoon(){
   clearTimeout(timer);
