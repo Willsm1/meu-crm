@@ -24,20 +24,6 @@ function loadUiEnhancements(){
     d.dataset.tmSalesDate='1';
     document.head.appendChild(d);
   }
-  if(!document.querySelector('script[data-tm-followup-schedule]')){
-    var f=document.createElement('script');
-    f.src='followup-schedule-ui.js?v=20260920-1132';
-    f.async=false;
-    f.dataset.tmFollowupSchedule='1';
-    document.head.appendChild(f);
-  }
-  if(!document.querySelector('script[data-tm-followup-agendar]')){
-    var a=document.createElement('script');
-    a.src='followup-agendar-ui.js?v=20260920-1154';
-    a.async=false;
-    a.dataset.tmFollowupAgendar='1';
-    document.head.appendChild(a);
-  }
   if(!document.querySelector('script[data-tm-gesture-guard]')){
     var g=document.createElement('script');
     g.src='gesture-navigation-guard.js?v=20260920-1148';
