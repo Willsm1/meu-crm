@@ -3,12 +3,20 @@
 'use strict';
 var ch=null, timer=null, lastReload=0;
 function loadUiEnhancements(){
-  if(document.querySelector('script[data-tm-period-filters]')) return;
-  var s=document.createElement('script');
-  s.src='ui-period-filters.js?v=20260920-0205';
-  s.async=false;
-  s.dataset.tmPeriodFilters='1';
-  document.head.appendChild(s);
+  if(!document.querySelector('script[data-tm-period-filters]')){
+    var s=document.createElement('script');
+    s.src='ui-period-filters.js?v=20260920-0242';
+    s.async=false;
+    s.dataset.tmPeriodFilters='1';
+    document.head.appendChild(s);
+  }
+  if(!document.querySelector('script[data-tm-sales-date]')){
+    var d=document.createElement('script');
+    d.src='sales-date.js?v=20260920-0255';
+    d.async=false;
+    d.dataset.tmSalesDate='1';
+    document.head.appendChild(d);
+  }
 }
 function reloadSoon(){
   clearTimeout(timer);
