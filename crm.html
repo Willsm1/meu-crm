@@ -509,16 +509,17 @@ PARTE 1 — CSS
     <table>
       <thead><tr id="leads-thead">
         <th style="width:2.5%;text-align:center"><input type="checkbox" class="cb" id="cb-all" onclick="toggleAll(this)" title="Selecionar todos"></th>
-        <th style="width:12.3%" class="sortable" onclick="setSort('nome',this)">Nome</th>
-        <th style="width:10.2%" class="sortable" onclick="setSort('empresa',this)">Equipe</th>
-        <th style="width:13.5%">Contato</th>
-        <th style="width:12.1%" class="sortable" onclick="setSort('status',this)">Status</th>
-        <th style="width:8.6%" class="sortable" onclick="setSort('valor',this)">Valor</th>
-        <th style="width:7.2%" class="sortable" onclick="setSort('data',this)">Data</th>
-        <th style="width:6.9%" class="sortable" onclick="setSort('origem',this)">Origem</th>
-        <th style="width:7.5%" class="sortable" onclick="setSort('perfil',this)">Perfil</th>
-        <th style="width:7.7%" class="sortable" onclick="setSort('regiao',this)">Região</th>
-        <th style="width:6%">Anotações</th>
+        <th style="width:11%" class="sortable" onclick="setSort('nome',this)">Nome</th>
+        <th style="width:7.5%" class="sortable" onclick="setSort('empresa',this)">Equipe</th>
+        <th style="width:9.5%" class="sortable" onclick="setSort('responsavel',this)">Responsável</th>
+        <th style="width:12.5%">Contato</th>
+        <th style="width:10.5%" class="sortable" onclick="setSort('status',this)">Status</th>
+        <th style="width:8%" class="sortable" onclick="setSort('valor',this)">Valor</th>
+        <th style="width:7%" class="sortable" onclick="setSort('data',this)">Data</th>
+        <th style="width:6.5%" class="sortable" onclick="setSort('origem',this)">Origem</th>
+        <th style="width:7%" class="sortable" onclick="setSort('perfil',this)">Perfil</th>
+        <th style="width:7%" class="sortable" onclick="setSort('regiao',this)">Região</th>
+        <th style="width:5%">Anotações</th>
         <th style="width:5.5%;text-align:center">Ações</th>
       </tr></thead>
       <tbody id="tbody"></tbody>
@@ -1918,7 +1919,7 @@ function searchNotas(){
   if(!tbody) return;
   
   if(!matched.length){
-    tbody.innerHTML='<tr><td colspan="12" style="padding:2rem;text-align:center;color:var(--text-muted)">Nenhuma anotação encontrada para "'+q+'"</td></tr>';
+    tbody.innerHTML='<tr><td colspan="13" style="padding:2rem;text-align:center;color:var(--text-muted)">Nenhuma anotação encontrada para "'+q+'"</td></tr>';
     return;
   }
   
@@ -1931,6 +1932,7 @@ function searchNotas(){
       '<td style="text-align:center"><input type="checkbox" class="cb row-cb" data-id="'+sid+'"></td>'+
       '<td style="font-weight:500;color:#93c5fd">'+escHtml(l.nome||'—')+'</td>'+
       '<td style="color:var(--text-secondary)">'+escHtml(l.empresa||'—')+'</td>'+
+      '<td style="font-size:12px;color:var(--text-secondary)">'+escHtml(l.responsavel||'—')+'</td>'+
       '<td style="font-size:12px;color:var(--text-muted)">'+(l.telefone?'<div>'+l.telefone+'</div>':'')+'</td>'+
       '<td><span class="badge '+(STATUS_CLASS[l.status]||'b-novo')+'">'+escHtml(l.status||'Novo')+'</span></td>'+
       '<td style="color:var(--text-secondary)">'+fmt(l.valor)+'</td>'+
@@ -2866,7 +2868,7 @@ function renderLeads(){
   const rg=(document.getElementById('search-regiao')||{value:''}).value.trim().toLowerCase();
   const pf=(document.getElementById('filterPerfil')||{}).value||'';
   let list=leads.filter(l=>{
-    const mq=!q||[l.nome,l.empresa,l.email,l.telefone].some(f=>String(f||'').toLowerCase().includes(q));
+    const mq=!q||[l.nome,l.empresa,l.responsavel,l.email,l.telefone].some(f=>String(f||'').toLowerCase().includes(q));
     const mr=!rg||String(l.regiao||'').toLowerCase().includes(rg);
     return mq&&mr&&(!st||l.status===st)&&(!or||l.origem===or)&&(!pf||l.perfil===pf);
   });
@@ -2885,6 +2887,7 @@ function renderLeads(){
     <td style="text-align:center"><input type="checkbox" class="cb row-cb" data-id="${sid}" ${isSel?'checked':''} onclick="toggleRow('${sid}',this)"></td>
     <td style="font-weight:500;color:#93c5fd" title="${l.nome||''}">${l.nome||'—'}</td>
     <td style="color:var(--text-secondary)" title="${l.empresa||''}">${l.empresa||'—'}</td>
+    <td style="font-size:12px;color:var(--text-secondary)" title="${l.responsavel||''}">${l.responsavel||'—'}</td>
     <td style="font-size:12px;color:var(--text-muted)">${l.email?`<div>${l.email}</div>`:''} ${l.telefone?`<div class="contact-copy" data-phone="${encodeURIComponent(l.telefone)}" onclick="copiarContato(this,event)" title="Clique para copiar" style="cursor:pointer;display:inline-block;transition:color .15s">${l.telefone}</div>`:''}</td>
     <td><span class="badge ${STATUS_CLASS[l.status]||'b-novo'}">${l.status||'Novo'}</span></td>
     <td style="color:var(--text-secondary)">${fmt(l.valor)}</td>
