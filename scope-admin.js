@@ -89,6 +89,10 @@ function applyScope(){
   window.leads=rows; try{ leads=rows; }catch(e){}
   snap(rows);
   try{ if(typeof renderAll==='function') renderAll(); }catch(e){}
+  try{
+    var rp=document.getElementById('page-relatorio');
+    if(rp&&rp.classList.contains('active')&&typeof renderRelatorio==='function') renderRelatorio();
+  }catch(e){}
   syncFollowup();
   updateScopeLabel(rows.length);
   return rows;
