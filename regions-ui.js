@@ -20,7 +20,7 @@ function token(){
 function headers(){var c=cfg(),t=token();return c&&t?{'apikey':c.publishableKey,'Authorization':'Bearer '+t,'Accept-Profile':c.schema||'crm','Content-Profile':c.schema||'crm','Content-Type':'application/json'}:null;}
 function norm(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();}
 function role(){try{return typeof papelAtual==='function'?papelAtual():'';}catch(e){return '';}}
-function canManage(){var r=role();return r==='admin'||r==='gerente';}
+function canManage(){return role()==='admin';}
 function rebuild(){normalized=new Map();regions.forEach(function(r){normalized.set(norm(r.name),r.name);});}
 function listUrl(){var c=cfg();return c.url+'/rest/v1/regions?select=id,name,normalized_name&is_active=eq.true&order=name.asc';}
 function loadRegions(force){
@@ -28,7 +28,7 @@ function loadRegions(force){
   if(loaded&&!force)return Promise.resolve(regions);
   var c=cfg(),h=headers();
   if(!c||!h)return Promise.reject(new Error('Sessão Supabase ausente'));
-  loading=fetch(listUrl(),{headers:{'apikey':c.publishableKey,'Authorization':h.Authorization,'Accept-Profile':c.schema||'crm'}})
+  loading=fetch(listUrl(),{headers:{'apikey':c.publishableKey,'Authorization':'Bearer '+token(),'Accept-Profile':c.schema||'crm'}})
     .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
     .then(function(rows){regions=Array.isArray(rows)?rows:[];rebuild();loaded=true;renderDatalist();return regions;})
     .finally(function(){loading=null;});
@@ -72,6 +72,7 @@ function ensureManager(){
     btn=document.createElement('button');btn.type='button';btn.id='tm-region-add';btn.className='btn btn-sm';btn.textContent='+ Região';btn.title='Cadastrar nova região no Supabase';wrap.appendChild(btn);
     btn.onclick=function(ev){
       ev.preventDefault();ev.stopPropagation();
+      if(!canManage()){if(typeof showToast==='function')showToast('Somente administrador pode cadastrar região.');return;}
       var initial=(inp.value||'').trim();
       var name=window.prompt('Nova região:',initial);
       if(name===null)return;
