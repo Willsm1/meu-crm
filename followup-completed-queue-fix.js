@@ -10,7 +10,7 @@ var obs=null,busy=false;
 function loadSaleStatusGuard(){
   if(document.querySelector('script[data-tm-sale-status-consistency]'))return;
   var s=document.createElement('script');
-  s.src='sale-status-consistency.js?v=20260920-2338';
+  s.src='sale-status-consistency.js?v=20260920-2344';
   s.async=false;
   s.dataset.tmSaleStatusConsistency='1';
   document.head.appendChild(s);
@@ -51,15 +51,11 @@ function apply(){
     rows.forEach(function(row){
       var id=rowLeadId(row),x=id&&byId[id];
       if(!x||!statusEligible(x)||!isCompleted(x))return;
-      /* Completed closes only the scheduled task. The lead remains in the active queue. */
       row.style.display='';
       row.dataset.tmCompletedStillEligible='1';
       completed.push(row);
     });
 
-    /* Core priority "concluido" is intentionally not part of the legacy priority weights,
-       which sends these rows to the end of a large queue. Keep them with active follow-ups
-       when the user is not applying an explicit sort/filter. */
     var prio=(document.getElementById('fu-prio')||{}).value||'';
     if(!prio&&!activeSort()&&completed.length){
       var current=Array.prototype.slice.call(tb.querySelectorAll('tr'));
