@@ -10,7 +10,7 @@ var obs=null,busy=false;
 function loadClosingDirect(){
   if(document.querySelector('script[data-tm-closing-direct]'))return;
   var c=document.createElement('script');
-  c.src='closing-direct.js?v=20260921-0024';
+  c.src='closing-direct.js?v=20260921-0031';
   c.async=false;
   c.dataset.tmClosingDirect='1';
   document.head.appendChild(c);
