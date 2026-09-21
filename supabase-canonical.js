@@ -6,6 +6,7 @@
 'use strict';
 
 var _snap = new Map();
+var _uuidByLocalId = new Map();
 var _saveChain = Promise.resolve();
 var _refreshTimer = null;
 
@@ -70,7 +71,13 @@ function canon(l){
 }
 function snapshot(rows){
   _snap=new Map();
-  (rows||[]).forEach(function(l){ if(l._uuid) _snap.set(String(l._uuid),canon(l)); });
+  _uuidByLocalId=new Map();
+  (rows||[]).forEach(function(l){
+    if(!l||!l._uuid) return;
+    var uuid=String(l._uuid);
+    _snap.set(uuid,canon(l));
+    if(l.id!==undefined&&l.id!==null&&String(l.id)!=='') _uuidByLocalId.set(String(l.id),uuid);
+  });
 }
 function same(a,b){ return JSON.stringify(a)===JSON.stringify(b); }
 function diff(a,b){
@@ -191,8 +198,23 @@ function arquivar(uuid){
   });
 }
 
+/* O formulario legado recria o objeto ao editar e pode perder _uuid/_supabase.
+   Reassocia a identidade canonica pelo id/local_id antes de calcular diffs.
+   Sem isso, uma edicao comum parece uma exclusao + novo lead e arquiva o original. */
+function repararIdentidadeCanonica(atuais){
+  (atuais||[]).forEach(function(l){
+    if(!l||l._uuid||l.id===undefined||l.id===null) return;
+    var uuid=_uuidByLocalId.get(String(l.id));
+    if(uuid && _snap.has(uuid)){
+      l._uuid=uuid;
+      l._supabase=true;
+    }
+  });
+}
+
 function persistirMudancas(){
   var atuais=Array.isArray(window.leads)?window.leads:(typeof leads!=='undefined'?leads:[]);
+  repararIdentidadeCanonica(atuais);
   var presentes=new Set();
   var ops=[];
 
