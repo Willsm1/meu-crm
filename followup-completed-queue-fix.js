@@ -8,38 +8,34 @@ var ELIGIBLE={'Interações':1,'Em negociação':1,'Proposta enviada':1,'Gold �
 var obs=null,busy=false;
 
 function loadSaleStatusGuard(){
-  if(document.querySelector('script[data-tm-sale-status-consistency]'))return;
-  var s=document.createElement('script');
-  s.src='sale-status-consistency.js?v=20260920-2354';
-  s.async=false;
-  s.dataset.tmSaleStatusConsistency='1';
-  document.head.appendChild(s);
+  if(!document.querySelector('script[data-tm-sale-status-consistency]')){
+    var s=document.createElement('script');
+    s.src='sale-status-consistency.js?v=20260920-2354';
+    s.async=false;
+    s.dataset.tmSaleStatusConsistency='1';
+    document.head.appendChild(s);
+  }
+  if(!document.querySelector('script[data-tm-closing-serialization]')){
+    var c=document.createElement('script');
+    c.src='closing-serialization.js?v=20260921-0013';
+    c.async=false;
+    c.dataset.tmClosingSerialization='1';
+    document.head.appendChild(c);
+  }
 }
 function lines(){
   try{var a=window.CRM_FOLLOWUP;return a&&typeof a.linhas==='function'?(a.linhas()||[]):[];}catch(e){return[];}
 }
-function mapById(){
-  var m={};lines().forEach(function(x){m[String(x.lead_id)]=x;});return m;
-}
+function mapById(){var m={};lines().forEach(function(x){m[String(x.lead_id)]=x;});return m;}
 function rowLeadId(row){
   var b=row&&row.querySelector('.tm-agendar-btn');
   if(b&&b.dataset&&b.dataset.leadId)return String(b.dataset.leadId);
   var old=row&&row.querySelector('input[id^="fu-d-"]');
   return old?String(old.id).slice(5):'';
 }
-function activeSort(){
-  return !!document.querySelector('.tm-fu-head-sort.on,#tm-age-sort button.on');
-}
-function goldEnabled(){
-  var b=document.getElementById('tm-fu-gold-toggle');
-  return !!(b&&b.getAttribute('aria-pressed')==='true');
-}
-function statusEligible(x){
-  if(!x)return false;
-  var st=String(x.status||'');
-  if(st==='Gold ⭐')return goldEnabled();
-  return !!ELIGIBLE[st];
-}
+function activeSort(){return !!document.querySelector('.tm-fu-head-sort.on,#tm-age-sort button.on');}
+function goldEnabled(){var b=document.getElementById('tm-fu-gold-toggle');return !!(b&&b.getAttribute('aria-pressed')==='true');}
+function statusEligible(x){if(!x)return false;var st=String(x.status||'');if(st==='Gold ⭐')return goldEnabled();return !!ELIGIBLE[st];}
 function isCompleted(x){return !!(x&&(x.tarefa_concluida||x.prioridade==='concluido'));}
 function apply(){
   if(busy)return;
@@ -55,7 +51,6 @@ function apply(){
       row.dataset.tmCompletedStillEligible='1';
       completed.push(row);
     });
-
     var prio=(document.getElementById('fu-prio')||{}).value||'';
     if(!prio&&!activeSort()&&completed.length){
       var current=Array.prototype.slice.call(tb.querySelectorAll('tr'));
