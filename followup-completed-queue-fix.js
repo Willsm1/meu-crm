@@ -17,7 +17,7 @@ function loadSaleStatusGuard(){
   }
   if(!document.querySelector('script[data-tm-closing-serialization]')){
     var c=document.createElement('script');
-    c.src='closing-serialization.js?v=20260921-0013';
+    c.src='closing-serialization.js?v=20260921-0019';
     c.async=false;
     c.dataset.tmClosingSerialization='1';
     document.head.appendChild(c);
