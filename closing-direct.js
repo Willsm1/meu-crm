@@ -31,13 +31,37 @@ function trackOpen(){
   window.openModal=function(id){currentId=id||null;return old.apply(this,arguments);};
   return true;
 }
+function resolveLead(){
+  var rows=Array.isArray(window.leads)?window.leads:[];
+  if(currentId){
+    var byId=rows.find(function(x){return String(x.id)===String(currentId);});
+    if(byId)return byId;
+  }
+  /* Fallback for a modal opened before this script finished loading. */
+  var nome=trim('f-nome');
+  var tel=trim('f-tel').replace(/\D/g,'');
+  if(!nome&&!tel)return null;
+  var matches=rows.filter(function(x){
+    var sameNome=nome&&String(x.nome||'').trim()===nome;
+    var sameTel=tel&&String(x.telefone||'').replace(/\D/g,'')===tel;
+    return tel ? sameTel : sameNome;
+  });
+  return matches.length===1?matches[0]:null;
+}
 function saveClosed(){
   if(busy)return;
   var st=el('f-status'),dateEl=el('tm-sale-date');
-  if(!st||st.value!=='Fechado'||!dateEl||!dateEl.value||!currentId)return;
-  var rows=Array.isArray(window.leads)?window.leads:[];
-  var lead=rows.find(function(x){return String(x.id)===String(currentId);});
-  if(!lead||!lead._uuid||!window.CRM_CANONICAL||typeof window.CRM_CANONICAL.rpc!=='function')return;
+  if(!st||st.value!=='Fechado')return;
+  if(!dateEl||!dateEl.value){
+    try{if(typeof showToast==='function')showToast('Informe a data da venda antes de salvar como Fechado.');}catch(e){}
+    if(dateEl){dateEl.focus();}
+    return;
+  }
+  var lead=resolveLead();
+  if(!lead||!lead._uuid||!window.CRM_CANONICAL||typeof window.CRM_CANONICAL.rpc!=='function'){
+    try{if(typeof showToast==='function')showToast('Não foi possível identificar o lead para concluir a venda. Feche e abra o cadastro novamente.');}catch(e){}
+    return;
+  }
   if(!trim('f-nome')){alert('Nome é obrigatório.');return;}
   busy=true;
   var btn=el('save-btn'),old=btn?btn.textContent:'';
@@ -64,12 +88,13 @@ function saveClosed(){
     .catch(function(e){try{if(typeof showToast==='function')showToast('Não foi possível fechar a venda: '+(e&&e.message||e));}catch(_){};})
     .finally(function(){busy=false;if(btn){btn.disabled=false;btn.textContent=old||'Salvar';}});
 }
-/* Capture phase runs before inline onclick/saveLead and before wrapper listeners. */
+/* Capture phase runs before inline onclick/saveLead and before wrapper listeners.
+   Every Fechado save is intercepted, including the missing-date case. */
 document.addEventListener('click',function(ev){
   var t=ev.target&&ev.target.closest?ev.target.closest('#save-btn'):null;
   if(!t)return;
-  var st=el('f-status'),dateEl=el('tm-sale-date');
-  if(!(st&&st.value==='Fechado'&&dateEl&&dateEl.value&&currentId))return;
+  var st=el('f-status');
+  if(!(st&&st.value==='Fechado'))return;
   ev.preventDefault();
   ev.stopImmediatePropagation();
   saveClosed();
