@@ -1,7 +1,7 @@
 /* Taurus Magnum CRM — realtime sync layer */
 (function(){
 'use strict';
-var ch=null,timer=null,lastReload=0;
+var ch=null,timer=null,lastReload=0,lastSuccessfulReload=0,authBound=false;
 function installFollowup401Retry(){
   if(window.__TM_FOLLOWUP_401_RETRY__)return;
   window.__TM_FOLLOWUP_401_RETRY__=true;
@@ -49,26 +49,43 @@ function reloadSoon(forceFull){
   clearTimeout(timer);
   timer=setTimeout(function(){
     lastReload=Date.now();
+    var job=null;
     if(!forceFull&&followupAtivo()&&window.CRM_FOLLOWUP&&typeof window.CRM_FOLLOWUP.carregar==='function'){
-      Promise.resolve(window.CRM_FOLLOWUP.carregar()).catch(function(e){try{console.warn('[CRM REALTIME] follow-up:',e&&e.message||e);}catch(_){}});
-      return;
+      job=Promise.resolve(window.CRM_FOLLOWUP.carregar());
+    }else if(window.CRM_CANONICAL&&window.CRM_CANONICAL.reload){
+      job=Promise.resolve(window.CRM_CANONICAL.reload());
     }
-    if(!window.CRM_CANONICAL||!window.CRM_CANONICAL.reload)return;
-    window.CRM_CANONICAL.reload().catch(function(e){try{console.warn('[CRM REALTIME] reload:',e&&e.message||e);}catch(_){}});
+    if(!job)return;
+    job.then(function(){lastSuccessfulReload=Date.now();}).catch(function(e){try{console.warn('[CRM REALTIME] reload:',e&&e.message||e);}catch(_){}});
   },140);
+}
+function bindAuthRefresh(){
+  if(authBound)return;
+  var cli=window.TM_SUPABASE_AUTH_CLIENT;
+  if(!cli||!cli.auth||typeof cli.auth.onAuthStateChange!=='function')return;
+  authBound=true;
+  cli.auth.onAuthStateChange(function(){
+    try{if(ch){cli.removeChannel(ch);ch=null;}}catch(e){}
+    reloadSoon(true);
+    setTimeout(start,120);
+  });
 }
 function start(){
   installFollowup401Retry();
   loadUiEnhancements();
   var cli=window.TM_SUPABASE_AUTH_CLIENT;
   if(!cli||!cli.channel){setTimeout(start,300);return;}
+  bindAuthRefresh();
   if(ch)return;
   ch=cli.channel('tm-crm-sync')
     .on('postgres_changes',{event:'*',schema:'crm',table:'leads'},function(){reloadSoon(false);})
     .on('postgres_changes',{event:'*',schema:'crm',table:'lead_assignments'},function(){reloadSoon(true);})
-    .subscribe(function(status){try{console.info('[CRM REALTIME]',status);}catch(_){}});
+    .subscribe(function(status){try{console.info('[CRM REALTIME]',status);}catch(_){} });
 }
-function fallback(){if(document.visibilityState==='visible'&&Date.now()-lastReload>5000)reloadSoon(false);}
+function fallback(){
+  if(document.visibilityState!=='visible')return;
+  if(Date.now()-lastSuccessfulReload>1200)reloadSoon(true);
+}
 window.addEventListener('focus',fallback);document.addEventListener('visibilitychange',fallback);
 installFollowup401Retry();
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
