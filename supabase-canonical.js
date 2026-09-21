@@ -140,6 +140,9 @@ function papelValido(){
   var p=(typeof papelAtual==='function')?papelAtual():null;
   return p==='admin'||p==='gerente'||p==='executivo';
 }
+function camadaEscopoPresente(){
+  return !!document.querySelector('script[src*="scope-admin.js"]');
+}
 
 /* Fonte local nunca mais e canonica para leads. Preferencias continuam locais. */
 window.fonteLocalPermitida=function(){ return false; };
@@ -150,14 +153,19 @@ window.load=function(){
     return;
   }
   if(!papelValido()){
-    if(typeof resolverPapel==='function') resolverPapel().then(function(){ if(papelValido()) carregarNaTela(); });
+    if(typeof resolverPapel==='function') resolverPapel().then(function(){
+      if(!papelValido()) return;
+      if(window.CRM_SCOPE&&typeof window.CRM_SCOPE.reload==='function') window.CRM_SCOPE.reload();
+      else if(!camadaEscopoPresente()) carregarNaTela();
+    });
     return;
   }
   if(window.CRM_CTX && window.CRM_CTX.haConflito && window.CRM_CTX.haConflito()){
     try{ leads=[]; calls=[]; renderAll(); window.CRM_CTX.abrirConflito(); }catch(e){}
     return;
   }
-  carregarNaTela();
+  if(window.CRM_SCOPE&&typeof window.CRM_SCOPE.reload==='function') return window.CRM_SCOPE.reload();
+  if(!camadaEscopoPresente()) return carregarNaTela();
 };
 window.refreshCRM=function(){
   try{ if(typeof showToast==='function') showToast('Atualizando pelo Supabase...'); }catch(e){}
@@ -269,6 +277,11 @@ window.addEventListener('message',function(ev){
   clearTimeout(_refreshTimer);
   _refreshTimer=setTimeout(function(){
     if(!papelValido()) return;
+    if(window.CRM_SCOPE&&typeof window.CRM_SCOPE.reload==='function'){
+      window.CRM_SCOPE.reload();
+      return;
+    }
+    if(camadaEscopoPresente()) return;
     carregarNaTela().then(function(){
       try{
         var pg=document.getElementById('page-followup');
@@ -282,7 +295,13 @@ window.addEventListener('message',function(ev){
 function bootstrap(){
   esconderLegado();
   if(typeof resolverPapel==='function'){
-    resolverPapel().then(function(){ if(papelValido()) carregarNaTela(); });
+    resolverPapel().then(function(){
+      if(!papelValido()) return;
+      /* scope-admin assume o primeiro carregamento. Evita renderizar 1715 globais
+         por alguns milissegundos antes de aplicar a visão do usuário (ex.: 1713 Will). */
+      if(camadaEscopoPresente()) return;
+      carregarNaTela();
+    });
   }
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bootstrap);

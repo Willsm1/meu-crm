@@ -121,20 +121,31 @@ function findTargetAfterSave(localId,beforeIds,nome,tel){
 }
 function saveSaleDateForLead(lead,date){
   if(!lead) return Promise.resolve(false);
-  return rpc('set_lead_sale_date',{
+  var closing=!!date;
+  var method=closing?'close_lead_with_sale_date':'set_lead_sale_date';
+  var body={
     p_lead_id:lead._uuid||null,
     p_local_id:lead._uuid?null:String(lead.id||''),
     p_data_fechamento:date||null,
     p_source:'crm'
-  }).then(function(){
+  };
+  return rpc(method,body).then(function(r){
+    if(closing){
+      var x=Array.isArray(r)?r[0]:r;
+      if(!x||x.resultado!=='atualizado'||String(x.status||'')!=='Fechado') throw new Error('Fechamento não confirmado');
+    }
     if(lead._uuid) saleDateMap.set(String(lead._uuid),date||'');
-    return loadSaleDates().then(function(){
+    var reload=window.CRM_CANONICAL&&typeof window.CRM_CANONICAL.reload==='function'
+      ? Promise.resolve(window.CRM_CANONICAL.reload()) : Promise.resolve();
+    return reload.then(function(){ return loadSaleDates(); }).then(function(){
       refreshRevenue();
-      try{ if(typeof showToast==='function') showToast(date?'Data da venda salva.':'Data da venda removida.'); }catch(e){}
+      if(window.CRM_FOLLOWUP&&typeof window.CRM_FOLLOWUP.carregar==='function') return window.CRM_FOLLOWUP.carregar();
+    }).then(function(){
+      try{ if(typeof showToast==='function') showToast(date?'Venda fechada e data salva.':'Data da venda removida.'); }catch(e){}
       return true;
     });
   }).catch(function(e){
-    try{ if(typeof showToast==='function') showToast('Não foi possível salvar a data da venda: '+e.message); }catch(_){}
+    try{ if(typeof showToast==='function') showToast('Não foi possível salvar a venda: '+e.message); }catch(_){}
     return false;
   });
 }
