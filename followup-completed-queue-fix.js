@@ -10,7 +10,7 @@ var obs=null,busy=false;
 function loadSaleStatusGuard(){
   if(document.querySelector('script[data-tm-sale-status-consistency]'))return;
   var s=document.createElement('script');
-  s.src='sale-status-consistency.js?v=20260920-2344';
+  s.src='sale-status-consistency.js?v=20260920-2354';
   s.async=false;
   s.dataset.tmSaleStatusConsistency='1';
   document.head.appendChild(s);
