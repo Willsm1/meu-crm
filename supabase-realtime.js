@@ -44,7 +44,8 @@ function loadUiEnhancements(){
   add('script[data-tm-duplicates]','duplicates-ui.js?v=20260920-1739','tmDuplicates');
   add('script[data-tm-kanban-scroll]','kanban-scroll-fix.js?v=20260920-2038','tmKanbanScroll');
   add('script[data-tm-followup-completed-queue]','followup-completed-queue-fix.js?v=20260920-2326','tmFollowupCompletedQueue');
-  add('script[data-tm-estagio-ui]','stage-ui.js?v=20260921-1648','tmEstagioUi');
+  add('script[data-tm-estagio-ui]','stage-ui.js?v=20260921-1708','tmEstagioUi');
+  add('script[data-tm-regions-ui]','regions-ui.js?v=20260921-1708','tmRegionsUi');
 }
 function followupAtivo(){var p=document.getElementById('page-followup');return !!(p&&p.classList.contains('active'));}
 function reloadSoon(forceFull){
@@ -82,6 +83,9 @@ function start(){
   ch=cli.channel('tm-crm-sync')
     .on('postgres_changes',{event:'*',schema:'crm',table:'leads'},function(){reloadSoon(false);})
     .on('postgres_changes',{event:'*',schema:'crm',table:'lead_assignments'},function(){reloadSoon(true);})
+    .on('postgres_changes',{event:'*',schema:'crm',table:'regions'},function(){
+      try{if(window.CRM_REGIONS_UI&&typeof window.CRM_REGIONS_UI.refresh==='function')window.CRM_REGIONS_UI.refresh();}catch(e){}
+    })
     .subscribe(function(status){try{console.info('[CRM REALTIME]',status);}catch(_){} });
 }
 function fallback(){
