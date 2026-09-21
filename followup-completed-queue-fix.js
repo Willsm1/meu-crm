@@ -7,21 +7,13 @@ window.__TM_FOLLOWUP_COMPLETED_QUEUE_FIX__=true;
 var ELIGIBLE={'Interações':1,'Em negociação':1,'Proposta enviada':1,'Gold ⭐':1};
 var obs=null,busy=false;
 
-function loadSaleStatusGuard(){
-  if(!document.querySelector('script[data-tm-sale-status-consistency]')){
-    var s=document.createElement('script');
-    s.src='sale-status-consistency.js?v=20260920-2354';
-    s.async=false;
-    s.dataset.tmSaleStatusConsistency='1';
-    document.head.appendChild(s);
-  }
-  if(!document.querySelector('script[data-tm-closing-serialization]')){
-    var c=document.createElement('script');
-    c.src='closing-serialization.js?v=20260921-0019';
-    c.async=false;
-    c.dataset.tmClosingSerialization='1';
-    document.head.appendChild(c);
-  }
+function loadClosingV2(){
+  if(document.querySelector('script[data-tm-closing-v2]'))return;
+  var c=document.createElement('script');
+  c.src='closing-v2.js?v=20260921-0021';
+  c.async=false;
+  c.dataset.tmClosingV2='1';
+  document.head.appendChild(c);
 }
 function lines(){
   try{var a=window.CRM_FOLLOWUP;return a&&typeof a.linhas==='function'?(a.linhas()||[]):[];}catch(e){return[];}
@@ -70,7 +62,7 @@ function apply(){
   }
 }
 function boot(){
-  loadSaleStatusGuard();
+  loadClosingV2();
   var tb=document.getElementById('fu-tbody');
   if(!tb){setTimeout(boot,150);return;}
   if(obs)obs.disconnect();
