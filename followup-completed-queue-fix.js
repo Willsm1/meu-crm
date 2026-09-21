@@ -7,12 +7,12 @@ window.__TM_FOLLOWUP_COMPLETED_QUEUE_FIX__=true;
 var ELIGIBLE={'Interações':1,'Em negociação':1,'Proposta enviada':1,'Gold ⭐':1};
 var obs=null,busy=false;
 
-function loadClosingV2(){
-  if(document.querySelector('script[data-tm-closing-v2]'))return;
+function loadClosingDirect(){
+  if(document.querySelector('script[data-tm-closing-direct]'))return;
   var c=document.createElement('script');
-  c.src='closing-v2.js?v=20260921-0021';
+  c.src='closing-direct.js?v=20260921-0024';
   c.async=false;
-  c.dataset.tmClosingV2='1';
+  c.dataset.tmClosingDirect='1';
   document.head.appendChild(c);
 }
 function lines(){
@@ -62,7 +62,7 @@ function apply(){
   }
 }
 function boot(){
-  loadClosingV2();
+  loadClosingDirect();
   var tb=document.getElementById('fu-tbody');
   if(!tb){setTimeout(boot,150);return;}
   if(obs)obs.disconnect();
