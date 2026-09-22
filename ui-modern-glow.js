@@ -106,9 +106,38 @@ s.textContent=`
 .table-wrap tbody tr:last-child td{
   border-bottom:none!important;
 }
+
+/* Zebra suave: alterna dois azuis proximos para separar contatos sem listras fortes. */
+.table-wrap tbody tr:not(.tr-selected):nth-child(odd) td{
+  background-color:rgba(27,57,96,.24)!important;
+}
+.table-wrap tbody tr:not(.tr-selected):nth-child(even) td{
+  background-color:rgba(12,31,58,.16)!important;
+}
 .table-wrap tbody tr:hover td{
-  background:rgba(59,130,246,.055)!important;
-  box-shadow:inset 0 1px 0 rgba(147,197,253,.025)!important;
+  background-color:rgba(59,130,246,.075)!important;
+  box-shadow:inset 0 1px 0 rgba(147,197,253,.03)!important;
+}
+
+/* Contraste seletivo na Carteira: somente os campos marcados pelo usuario.
+   1 checkbox | 2 nome | 3 equipe | 4 responsavel | 5 contato | 6 status | 7 valor
+   8 data | 9 origem | 10 perfil | 11 estagio | 12 regiao | 13 anotacao | 14 acoes */
+.table-wrap tbody td:nth-child(3),
+.table-wrap tbody td:nth-child(4),
+.table-wrap tbody td:nth-child(5),
+.table-wrap tbody td:nth-child(8),
+.table-wrap tbody td:nth-child(9),
+.table-wrap tbody td:nth-child(10),
+.table-wrap tbody td:nth-child(11),
+.table-wrap tbody td:nth-child(12),
+.table-wrap tbody td:nth-child(13){
+  color:#d6e2f0!important;
+}
+.table-wrap tbody td:nth-child(13) .icon-btn,
+.table-wrap tbody td:nth-child(13) i,
+.table-wrap tbody td:nth-child(13) svg{
+  color:#cbd8e8!important;
+  opacity:.92;
 }
 
 /* Follow-up segue a mesma logica de tabela funcional. */
