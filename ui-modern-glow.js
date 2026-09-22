@@ -1,6 +1,7 @@
 /* Taurus Magnum CRM — modern depth / glow layer
  * Escopo: somente acabamento visual. Nao altera dados, filtros, layout estrutural ou Supabase.
  * Direcao: dark navy + blue glow discreto + accent green previamente aprovado.
+ * Carteira permanece funcional/limpa; luz concentrada em campos e cards.
  */
 (function(){
 'use strict';
@@ -14,12 +15,13 @@ s.textContent=`
   --tm-edge-blue-faint:rgba(96,165,250,.055);
   --tm-deep-shadow:rgba(0,0,0,.24);
   --tm-card-glow:rgba(37,99,235,.055);
+  --tm-field-border:rgba(96,165,250,.28);
+  --tm-field-border-hover:rgba(96,165,250,.40);
 }
 
-/* Blocos principais: mais profundidade sem mudar a paleta. */
+/* Cards principais: profundidade moderna, sem invadir areas densas de dados. */
 .stat,
 .dash-card,
-.table-wrap,
 #page-kanban .k-col,
 #page-kanban .k-card{
   border-color:rgba(96,165,250,.18)!important;
@@ -34,16 +36,14 @@ s.textContent=`
     radial-gradient(circle at 100% 100%,rgba(30,64,175,.038),transparent 20%)!important;
 }
 
-/* Os cards maiores ganham contorno mais limpo, quase "vidro escuro". */
 .stat,
 .dash-card,
-.table-wrap,
 #page-kanban .k-col{
   border-width:1px!important;
   backdrop-filter:saturate(108%);
 }
 
-/* KPIs: brilho discreto nos quatro cantos, sem alterar a barra superior existente. */
+/* KPIs. */
 .stat{
   transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease;
 }
@@ -57,7 +57,7 @@ s.textContent=`
   transform:translateY(-1px);
 }
 
-/* Dashboard: cards mais "produto", mantendo o verde especial do bloco Origem. */
+/* Dashboard. */
 .dash-card{
   transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease;
 }
@@ -78,20 +78,57 @@ s.textContent=`
     0 0 28px rgba(130,191,135,.065)!important;
 }
 
-/* Tabela principal e Follow-up: acabamento luminoso só na moldura. */
-.table-wrap,
-#page-followup .container>div[style*="overflow-x:auto"]{
-  box-shadow:
-    inset 1px 1px 0 rgba(147,197,253,.10),
-    inset -1px -1px 0 rgba(59,130,246,.04),
-    0 10px 26px rgba(0,0,0,.20),
-    0 0 20px rgba(37,99,235,.045);
+/* CARTEIRA / TABELAS: leitura limpa. Sem halo, sem gradiente sobre o corpo. */
+.table-wrap{
+  background:var(--bg-card)!important;
+  background-image:none!important;
+  border:1px solid rgba(96,165,250,.16)!important;
+  box-shadow:0 8px 22px rgba(0,0,0,.16)!important;
 }
-th{
-  box-shadow:inset 0 1px 0 rgba(147,197,253,.055);
+.table-wrap table{
+  background:transparent!important;
+}
+.table-wrap th{
+  background:var(--bg-surface)!important;
+  background-image:none!important;
+  border-bottom:1px solid rgba(96,165,250,.20)!important;
+  box-shadow:inset 0 -1px 0 rgba(0,0,0,.14)!important;
+}
+.table-wrap tbody tr{
+  background:transparent!important;
+}
+.table-wrap tbody td{
+  background:transparent!important;
+  background-image:none!important;
+  border-bottom:1px solid rgba(96,165,250,.095)!important;
+  box-shadow:none!important;
+}
+.table-wrap tbody tr:last-child td{
+  border-bottom:none!important;
+}
+.table-wrap tbody tr:hover td{
+  background:rgba(59,130,246,.055)!important;
+  box-shadow:inset 0 1px 0 rgba(147,197,253,.025)!important;
 }
 
-/* Kanban: colunas e cards deixam de parecer blocos chapados. */
+/* Follow-up segue a mesma logica de tabela funcional. */
+#page-followup .container>div[style*="overflow-x:auto"]{
+  background:var(--bg-card)!important;
+  border:1px solid rgba(96,165,250,.15)!important;
+  border-radius:10px;
+  box-shadow:0 8px 22px rgba(0,0,0,.14)!important;
+}
+#page-followup th{
+  background:var(--bg-surface)!important;
+  border-bottom:1px solid rgba(96,165,250,.18)!important;
+  box-shadow:none!important;
+}
+#page-followup #fu-tbody td{
+  border-bottom:1px solid rgba(96,165,250,.085)!important;
+  box-shadow:none!important;
+}
+
+/* Kanban: profundidade continua nos cards, onde funciona bem. */
 #page-kanban .k-col{
   box-shadow:
     inset 1px 1px 0 rgba(147,197,253,.085),
@@ -113,18 +150,57 @@ th{
     0 0 22px rgba(130,191,135,.065)!important;
 }
 
-/* Campos: dark input permanente; elimina o branco do autofill do Chrome. */
+/* CAMPOS: aqui fica a maior parte da luz. */
 input[type=text],
 input[type=email],
 input[type=number],
 input[type=date],
 select,
 textarea{
+  background-color:var(--bg-input)!important;
+  border-color:var(--tm-field-border)!important;
   box-shadow:
-    inset 1px 1px 0 rgba(147,197,253,.045),
-    0 4px 12px rgba(0,0,0,.10);
+    inset 0 1px 0 rgba(191,219,254,.075),
+    inset 0 -1px 0 rgba(30,64,175,.035),
+    0 5px 15px rgba(0,0,0,.13),
+    0 0 14px rgba(37,99,235,.028)!important;
   transition:border-color .15s ease,box-shadow .15s ease,background-color .15s ease;
 }
+input[type=text]:hover,
+input[type=email]:hover,
+input[type=number]:hover,
+input[type=date]:hover,
+select:hover,
+textarea:hover{
+  border-color:var(--tm-field-border-hover)!important;
+  box-shadow:
+    inset 0 1px 0 rgba(191,219,254,.10),
+    0 5px 16px rgba(0,0,0,.15),
+    0 0 18px rgba(37,99,235,.045)!important;
+}
+input::placeholder,
+textarea::placeholder{
+  color:#60728d!important;
+}
+
+/* Busca e filtros: um pouco mais de presenca sem clarear o fundo do CRM. */
+#search-leads,
+#search-notas,
+#search-regiao,
+#filterStatus,
+#filterPerfil,
+#filterOrigem,
+#fu-busca,
+#fu-prio,
+#fu-resp{
+  border-color:rgba(96,165,250,.32)!important;
+  box-shadow:
+    inset 0 1px 0 rgba(191,219,254,.09),
+    0 6px 18px rgba(0,0,0,.14),
+    0 0 16px rgba(37,99,235,.04)!important;
+}
+
+/* Evita autofill branco do Chrome. */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
@@ -133,19 +209,22 @@ select:-webkit-autofill{
   -webkit-text-fill-color:var(--text-primary)!important;
   -webkit-box-shadow:0 0 0 1000px var(--bg-input) inset!important;
   caret-color:var(--text-primary)!important;
-  border-color:var(--border-md)!important;
+  border-color:var(--tm-field-border)!important;
   transition:background-color 9999s ease-out 0s;
 }
+
 input:focus,
 select:focus,
 textarea:focus{
+  border-color:var(--tm-green)!important;
   box-shadow:
-    inset 1px 1px 0 rgba(183,223,189,.08),
+    inset 0 1px 0 rgba(183,223,189,.10),
     0 0 0 3px var(--tm-green-glow),
-    0 6px 18px rgba(0,0,0,.16)!important;
+    0 7px 20px rgba(0,0,0,.17),
+    0 0 20px rgba(130,191,135,.045)!important;
 }
 
-/* Botoes e selects ganham micro-luz de borda; CTAs continuam azuis. */
+/* Botoes: micro-luz apenas. */
 .btn,
 .nav-btn{
   box-shadow:inset 0 1px 0 rgba(191,219,254,.055),0 4px 12px rgba(0,0,0,.10);
@@ -155,7 +234,7 @@ textarea:focus{
   box-shadow:inset 0 1px 0 rgba(191,219,254,.15),0 6px 18px rgba(29,78,216,.16);
 }
 
-/* Navegacao: apenas profundidade, sem trocar cor ou logo. */
+/* Navegacao: profundidade discreta; logo e cores estruturais intactos. */
 .nav{
   box-shadow:0 8px 24px rgba(0,0,0,.15),inset 0 -1px 0 rgba(96,165,250,.045);
 }
@@ -163,7 +242,6 @@ textarea:focus{
   box-shadow:0 8px 20px rgba(0,0,0,.08),inset 0 -1px 0 rgba(96,165,250,.035);
 }
 
-/* Respeita preferencias de movimento. */
 @media (prefers-reduced-motion:reduce){
   .stat,.dash-card,#page-kanban .k-card{transition:none!important;transform:none!important}
 }
