@@ -72,6 +72,7 @@ function loadUiEnhancements(){
   add('script[data-tm-calls-ui]','calls-supabase-ui.js?v=20260921-2339','tmCallsUi');
   add('script[data-tm-ownership-guard]','ownership-guard.js?v=20260922-0815','tmOwnershipGuard');
   add('script[data-tm-brand-accent]','ui-brand-accent.js?v=20260922-1315','tmBrandAccent');
+  add('script[data-tm-modern-glow]','ui-modern-glow.js?v=20260922-1324','tmModernGlow');
 }
 
 function followupAtivo(){
