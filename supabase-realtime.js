@@ -70,6 +70,7 @@ function loadUiEnhancements(){
   add('script[data-tm-estagio-ui]','stage-ui.js?v=20260921-1708','tmEstagioUi');
   add('script[data-tm-regions-ui]','regions-ui.js?v=20260921-1708','tmRegionsUi');
   add('script[data-tm-calls-ui]','calls-supabase-ui.js?v=20260921-2339','tmCallsUi');
+  add('script[data-tm-ownership-guard]','ownership-guard.js?v=20260922-0815','tmOwnershipGuard');
 }
 
 function followupAtivo(){
