@@ -12,7 +12,8 @@
     "releases/2.0.35/chunk_04.b64",
     "releases/2.0.35/chunk_05.b64",
     "releases/2.0.35/chunk_06.b64",
-    "releases/2.0.35/chunk_07.b64",
+    "releases/2.0.35/chunk_07a.b64",
+    "releases/2.0.35/chunk_07b.b64",
     "releases/2.0.35/chunk_08.b64"
   ],
   "update_url": "https://dbnjlvnkmgbiknhbefys.supabase.co/functions/v1/taurus-extension/updates.xml",
