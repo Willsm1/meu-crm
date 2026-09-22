@@ -2,6 +2,22 @@
 (function(){
 'use strict';
 var ch=null,timer=null,lastReload=0,lastSuccessfulReload=0,authBound=false;
+
+async function refreshedToken(){
+  var cli=window.TM_SUPABASE_AUTH_CLIENT;
+  if(!cli||!cli.auth)return null;
+  try{
+    if(typeof cli.auth.refreshSession==='function')await cli.auth.refreshSession();
+  }catch(e){}
+  try{
+    if(typeof cli.auth.getSession==='function'){
+      var s=await cli.auth.getSession();
+      return s&&s.data&&s.data.session&&s.data.session.access_token;
+    }
+  }catch(e){}
+  return null;
+}
+
 function installFollowup401Retry(){
   if(window.__TM_FOLLOWUP_401_RETRY__)return;
   window.__TM_FOLLOWUP_401_RETRY__=true;
@@ -12,17 +28,15 @@ function installFollowup401Retry(){
     var isFollowup=url.indexOf('/rest/v1/v_followup')>=0;
     var first=await originalFetch(input,init);
     if(!isFollowup||first.status!==401)return first;
-    await new Promise(function(resolve){setTimeout(resolve,700);});
+
+    // Uma única recuperação explícita de sessão. Sem loop.
     try{
-      var token=null,cli=window.TM_SUPABASE_AUTH_CLIENT;
-      if(cli&&cli.auth&&typeof cli.auth.getSession==='function'){
-        var sessionResult=await cli.auth.getSession();
-        token=sessionResult&&sessionResult.data&&sessionResult.data.session&&sessionResult.data.session.access_token;
-      }
+      var token=await refreshedToken();
+      if(!token)return first;
       var retryInit=Object.assign({},init||{});
       var baseHeaders=(init&&init.headers)||((typeof Request!=='undefined'&&input instanceof Request)?input.headers:undefined);
       var headers=new Headers(baseHeaders||{});
-      if(token)headers.set('Authorization','Bearer '+token);
+      headers.set('Authorization','Bearer '+token);
       retryInit.headers=headers;
       var retryInput=(typeof input==='string')?input:((input&&input.url)||input);
       return await originalFetch(retryInput,retryInit);
@@ -31,8 +45,14 @@ function installFollowup401Retry(){
     }
   };
 }
+
 function loadUiEnhancements(){
-  function add(sel,src,key){if(document.querySelector(sel))return;var s=document.createElement('script');s.src=src;s.async=false;s.dataset[key]='1';document.head.appendChild(s);}
+  function add(sel,src,key){
+    if(document.querySelector(sel))return;
+    var s=document.createElement('script');
+    s.src=src;s.async=false;s.dataset[key]='1';
+    document.head.appendChild(s);
+  }
   add('script[data-tm-scope-privacy]','scope-privacy-ui.js?v=20260920-1124','tmScopePrivacy');
   add('script[data-tm-period-filters]','ui-period-filters.js?v=20260920-0242','tmPeriodFilters');
   add('script[data-tm-sales-date]','sales-date.js?v=20260920-0255','tmSalesDate');
@@ -46,8 +66,14 @@ function loadUiEnhancements(){
   add('script[data-tm-followup-completed-queue]','followup-completed-queue-fix.js?v=20260920-2326','tmFollowupCompletedQueue');
   add('script[data-tm-estagio-ui]','stage-ui.js?v=20260921-1708','tmEstagioUi');
   add('script[data-tm-regions-ui]','regions-ui.js?v=20260921-1708','tmRegionsUi');
+  add('script[data-tm-calls-ui]','calls-supabase-ui.js?v=20260921-2339','tmCallsUi');
 }
-function followupAtivo(){var p=document.getElementById('page-followup');return !!(p&&p.classList.contains('active'));}
+
+function followupAtivo(){
+  var p=document.getElementById('page-followup');
+  return !!(p&&p.classList.contains('active'));
+}
+
 function reloadSoon(forceFull){
   clearTimeout(timer);
   timer=setTimeout(function(){
@@ -59,9 +85,17 @@ function reloadSoon(forceFull){
       job=Promise.resolve(window.CRM_CANONICAL.reload());
     }
     if(!job)return;
-    job.then(function(){lastSuccessfulReload=Date.now();}).catch(function(e){try{console.warn('[CRM REALTIME] reload:',e&&e.message||e);}catch(_){}});
+    job.then(function(){lastSuccessfulReload=Date.now();})
+      .catch(function(e){try{console.warn('[CRM REALTIME] reload:',e&&e.message||e);}catch(_){}});
   },140);
 }
+
+function refreshCalls(){
+  try{
+    if(window.CRM_CALLS_UI&&typeof window.CRM_CALLS_UI.refresh==='function')window.CRM_CALLS_UI.refresh();
+  }catch(e){}
+}
+
 function bindAuthRefresh(){
   if(authBound)return;
   var cli=window.TM_SUPABASE_AUTH_CLIENT;
@@ -69,10 +103,12 @@ function bindAuthRefresh(){
   authBound=true;
   cli.auth.onAuthStateChange(function(){
     try{if(ch){cli.removeChannel(ch);ch=null;}}catch(e){}
+    refreshCalls();
     reloadSoon(true);
     setTimeout(start,120);
   });
 }
+
 function start(){
   installFollowup401Retry();
   loadUiEnhancements();
@@ -83,16 +119,27 @@ function start(){
   ch=cli.channel('tm-crm-sync')
     .on('postgres_changes',{event:'*',schema:'crm',table:'leads'},function(){reloadSoon(false);})
     .on('postgres_changes',{event:'*',schema:'crm',table:'lead_assignments'},function(){reloadSoon(true);})
+    .on('postgres_changes',{event:'*',schema:'crm',table:'interactions'},function(){reloadSoon(false);})
+    .on('postgres_changes',{event:'*',schema:'crm',table:'calls'},function(){
+      refreshCalls();
+      reloadSoon(false);
+    })
     .on('postgres_changes',{event:'*',schema:'crm',table:'regions'},function(){
-      try{if(window.CRM_REGIONS_UI&&typeof window.CRM_REGIONS_UI.refresh==='function')window.CRM_REGIONS_UI.refresh();}catch(e){}
+      try{
+        if(window.CRM_REGIONS_UI&&typeof window.CRM_REGIONS_UI.refresh==='function')window.CRM_REGIONS_UI.refresh();
+      }catch(e){}
     })
     .subscribe(function(status){try{console.info('[CRM REALTIME]',status);}catch(_){} });
 }
+
 function fallback(){
   if(document.visibilityState!=='visible')return;
+  refreshCalls();
   if(Date.now()-lastSuccessfulReload>1200)reloadSoon(true);
 }
-window.addEventListener('focus',fallback);document.addEventListener('visibilitychange',fallback);
+
+window.addEventListener('focus',fallback);
+document.addEventListener('visibilitychange',fallback);
 installFollowup401Retry();
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 })();
