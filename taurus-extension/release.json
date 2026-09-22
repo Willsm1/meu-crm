@@ -7,6 +7,7 @@
   "crx_size": 66080,
   "chunks": [
     "releases/2.0.35/chunk_01.b64",
+    "releases/2.0.35/chunk_01_tail.b64",
     "releases/2.0.35/chunk_02.b64",
     "releases/2.0.35/chunk_03.b64",
     "releases/2.0.35/chunk_04.b64",
