@@ -1,5 +1,5 @@
 name: Branch Browser Smoke
-# preview proxy v3 retest
+# preview proxy v4 retest
 
 on:
   push:
