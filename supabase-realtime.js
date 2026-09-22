@@ -29,6 +29,9 @@ function installFollowup401Retry(){
     var first=await originalFetch(input,init);
     if(!isFollowup||first.status!==401)return first;
 
+    // Preserva o atraso de segurança do fluxo estável antes de renovar/repetir.
+    await new Promise(function(resolve){setTimeout(resolve,700);});
+
     // Uma única recuperação explícita de sessão. Sem loop.
     try{
       var token=await refreshedToken();
