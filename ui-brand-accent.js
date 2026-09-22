@@ -109,17 +109,30 @@ td[data-tm-estagio-col] .badge{
   border-color:rgba(130,191,135,.34)!important;
 }
 
-/* Follow-up: busca deve obedecer ao tema escuro mesmo quando Chrome tenta autofill branco. */
+/* Follow-up: busca replica o visual do campo de busca da Carteira. */
 html body #page-followup input#fu-busca{
   -webkit-appearance:none!important;
   appearance:none!important;
   color-scheme:dark!important;
-  background:#080f1e!important;
-  background-color:#080f1e!important;
-  color:#e2e8f0!important;
-  -webkit-text-fill-color:#e2e8f0!important;
+  height:40px!important;
+  min-width:180px!important;
+  padding:0 12px!important;
+  border-radius:8px!important;
+  font-size:13px!important;
+  line-height:40px!important;
+  background:var(--bg-input)!important;
+  background-color:var(--bg-input)!important;
+  color:var(--text-primary)!important;
+  -webkit-text-fill-color:var(--text-primary)!important;
   border:1px solid rgba(104,208,255,.52)!important;
+  -webkit-box-shadow:
+    0 0 0 1000px var(--bg-input) inset,
+    inset 0 1px 0 rgba(219,234,254,.14),
+    0 0 0 1px rgba(96,165,250,.055),
+    0 7px 20px rgba(0,0,0,.15),
+    0 0 24px rgba(47,174,255,.12)!important;
   box-shadow:
+    0 0 0 1000px var(--bg-input) inset,
     inset 0 1px 0 rgba(219,234,254,.14),
     0 0 0 1px rgba(96,165,250,.055),
     0 7px 20px rgba(0,0,0,.15),
@@ -130,32 +143,55 @@ html body #page-followup input#fu-busca::placeholder{
   opacity:1!important;
   -webkit-text-fill-color:#60728d!important;
 }
+html body #page-followup input#fu-busca:hover{
+  border-color:rgba(104,208,255,.64)!important;
+  -webkit-box-shadow:
+    0 0 0 1000px var(--bg-input) inset,
+    inset 0 1px 0 rgba(219,234,254,.15),
+    0 0 0 1px rgba(104,208,255,.08),
+    0 6px 18px rgba(0,0,0,.16),
+    0 0 24px rgba(47,174,255,.13)!important;
+  box-shadow:
+    0 0 0 1000px var(--bg-input) inset,
+    inset 0 1px 0 rgba(219,234,254,.15),
+    0 0 0 1px rgba(104,208,255,.08),
+    0 6px 18px rgba(0,0,0,.16),
+    0 0 24px rgba(47,174,255,.13)!important;
+}
 html body #page-followup input#fu-busca:-webkit-autofill,
 html body #page-followup input#fu-busca:-webkit-autofill:hover,
 html body #page-followup input#fu-busca:-webkit-autofill:focus,
 html body #page-followup input#fu-busca:-webkit-autofill:active{
-  background:#080f1e!important;
-  background-color:#080f1e!important;
-  color:#e2e8f0!important;
-  -webkit-text-fill-color:#e2e8f0!important;
-  caret-color:#e2e8f0!important;
+  background:var(--bg-input)!important;
+  background-color:var(--bg-input)!important;
+  color:var(--text-primary)!important;
+  -webkit-text-fill-color:var(--text-primary)!important;
+  caret-color:var(--text-primary)!important;
   -webkit-box-shadow:
-    0 0 0 1000px #080f1e inset,
+    0 0 0 1000px var(--bg-input) inset,
     0 0 0 1px rgba(96,165,250,.055),
     0 7px 20px rgba(0,0,0,.15),
     0 0 24px rgba(47,174,255,.12)!important;
   box-shadow:
-    0 0 0 1000px #080f1e inset,
+    0 0 0 1000px var(--bg-input) inset,
     0 0 0 1px rgba(96,165,250,.055),
     0 7px 20px rgba(0,0,0,.15),
     0 0 24px rgba(47,174,255,.12)!important;
 }
 html body #page-followup input#fu-busca:focus{
   border-color:rgba(145,209,154,.80)!important;
-  background:#080f1e!important;
-  color:#e2e8f0!important;
-  -webkit-text-fill-color:#e2e8f0!important;
+  background:var(--bg-input)!important;
+  color:var(--text-primary)!important;
+  -webkit-text-fill-color:var(--text-primary)!important;
+  -webkit-box-shadow:
+    0 0 0 1000px var(--bg-input) inset,
+    inset 0 1px 0 rgba(219,244,224,.16),
+    0 0 0 3px rgba(130,191,135,.16),
+    0 0 0 1px rgba(145,209,154,.18),
+    0 8px 22px rgba(0,0,0,.18),
+    0 0 26px rgba(130,191,135,.12)!important;
   box-shadow:
+    0 0 0 1000px var(--bg-input) inset,
     inset 0 1px 0 rgba(219,244,224,.16),
     0 0 0 3px rgba(130,191,135,.16),
     0 0 0 1px rgba(145,209,154,.18),
