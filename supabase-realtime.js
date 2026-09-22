@@ -44,6 +44,9 @@ function loadUiEnhancements(){
   add('script[data-tm-duplicates]','duplicates-ui.js?v=20260920-1739','tmDuplicates');
   add('script[data-tm-kanban-scroll]','kanban-scroll-fix.js?v=20260920-2038','tmKanbanScroll');
   add('script[data-tm-followup-completed-queue]','followup-completed-queue-fix.js?v=20260920-2326','tmFollowupCompletedQueue');
+  add('script[data-tm-estagio-ui]','stage-ui.js?v=20260922-1540','tmEstagioUi');
+  add('script[data-tm-brand-accent]','ui-brand-accent.js?v=20260922-1540','tmBrandAccent');
+  add('script[data-tm-modern-glow]','ui-modern-glow.js?v=20260922-1540','tmModernGlow');
 }
 function followupAtivo(){var p=document.getElementById('page-followup');return !!(p&&p.classList.contains('active'));}
 function reloadSoon(forceFull){
