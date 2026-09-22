@@ -1,0 +1,20 @@
+{
+  "name": "Taurus Magnum CRM — WhatsApp",
+  "channel": "stable",
+  "version": "2.0.35",
+  "extension_id": "iadkooakfglbohnnhcoeaelmfmbgocfl",
+  "crx_sha256": "0f0ec15459da6aef3dd5667354c8dd4726d74102d876cabde1dde23c297c69ff",
+  "crx_size": 66080,
+  "chunks": [
+    "releases/2.0.35/chunk_01.b64",
+    "releases/2.0.35/chunk_02.b64",
+    "releases/2.0.35/chunk_03.b64",
+    "releases/2.0.35/chunk_04.b64",
+    "releases/2.0.35/chunk_05.b64",
+    "releases/2.0.35/chunk_06.b64",
+    "releases/2.0.35/chunk_07.b64",
+    "releases/2.0.35/chunk_08.b64"
+  ],
+  "update_url": "https://dbnjlvnkmgbiknhbefys.supabase.co/functions/v1/taurus-extension/updates.xml",
+  "crx_url": "https://dbnjlvnkmgbiknhbefys.supabase.co/functions/v1/taurus-extension/taurus-magnum.crx"
+}
