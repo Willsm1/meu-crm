@@ -1,0 +1,131 @@
+name: Branch Browser Smoke
+
+on:
+  push:
+    branches:
+      - test-crm-estagio-perfil-produto
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install test dependency
+        run: python -m pip install --quiet selenium requests
+
+      - name: Start local branch server
+        run: |
+          python -m http.server 8080 >/tmp/crm-http.log 2>&1 &
+          echo $! >/tmp/crm-http.pid
+          sleep 2
+
+      - name: Static branch asset smoke
+        run: |
+          python - <<'PY'
+          import requests
+          base='http://127.0.0.1:8080/'
+          for path in ['crm.html','stage-ui.js','regions-ui.js','calls-supabase-ui.js','supabase-realtime.js']:
+              r=requests.get(base+path,timeout=10)
+              print(path, r.status_code, len(r.content))
+              assert r.status_code==200, (path,r.status_code)
+          PY
+
+      - name: Remote preview routing smoke
+        run: |
+          python - <<'PY'
+          import requests
+          base='https://dbnjlvnkmgbiknhbefys.supabase.co/functions/v1/crm-preview/'
+          for path in ['crm.html','stage-ui.js','regions-ui.js','calls-supabase-ui.js','supabase-realtime.js']:
+              r=requests.get(base+path,timeout=20)
+              print(path, r.status_code, r.headers.get('x-taurus-preview-branch'), len(r.content))
+              assert r.status_code==200, (path,r.status_code,r.text[:200])
+              assert r.headers.get('x-taurus-preview-branch')=='test-crm-estagio-perfil-produto'
+          html=requests.get(base+'crm.html?auth=1',timeout=20).text
+          assert 'Taurus Magnum CRM' in html
+          assert 'Preview asset not found' not in html
+          PY
+
+      - name: Headless Chrome local branch smoke
+        run: |
+          python - <<'PY'
+          import json, time
+          from selenium import webdriver
+          from selenium.webdriver.chrome.options import Options
+
+          opts=Options()
+          opts.add_argument('--headless=new')
+          opts.add_argument('--no-sandbox')
+          opts.add_argument('--disable-dev-shm-usage')
+          opts.add_argument('--window-size=1440,1000')
+          opts.set_capability('goog:loggingPrefs', {'browser':'ALL'})
+
+          d=webdriver.Chrome(options=opts)
+          try:
+              d.get('http://127.0.0.1:8080/crm.html?auth=1')
+              time.sleep(4)
+              print('TITLE:', d.title)
+              print('URL:', d.current_url)
+              assert 'Taurus Magnum CRM' in d.title
+              src=d.page_source
+              assert 'Preview asset not found' not in src
+              d.save_screenshot('/tmp/crm-local-branch.png')
+              logs=d.get_log('browser')
+              severe=[x for x in logs if x.get('level')=='SEVERE']
+              print('BROWSER LOGS:', json.dumps(logs[-40:], ensure_ascii=False, indent=2))
+              syntax=[x for x in severe if 'SyntaxError' in x.get('message','')]
+              assert not syntax, syntax
+          finally:
+              d.quit()
+          PY
+
+      - name: Headless Chrome remote preview smoke
+        run: |
+          python - <<'PY'
+          import json, time
+          from selenium import webdriver
+          from selenium.webdriver.chrome.options import Options
+
+          opts=Options()
+          opts.add_argument('--headless=new')
+          opts.add_argument('--no-sandbox')
+          opts.add_argument('--disable-dev-shm-usage')
+          opts.add_argument('--window-size=1440,1000')
+          opts.set_capability('goog:loggingPrefs', {'browser':'ALL'})
+
+          d=webdriver.Chrome(options=opts)
+          try:
+              d.get('https://dbnjlvnkmgbiknhbefys.supabase.co/functions/v1/crm-preview/crm.html?auth=1')
+              time.sleep(5)
+              print('TITLE:', d.title)
+              print('URL:', d.current_url)
+              assert 'Taurus Magnum CRM' in d.title
+              src=d.page_source
+              assert 'Preview asset not found' not in src
+              d.save_screenshot('/tmp/crm-remote-preview.png')
+              logs=d.get_log('browser')
+              severe=[x for x in logs if x.get('level')=='SEVERE']
+              print('BROWSER LOGS:', json.dumps(logs[-40:], ensure_ascii=False, indent=2))
+              syntax=[x for x in severe if 'SyntaxError' in x.get('message','')]
+              assert not syntax, syntax
+          finally:
+              d.quit()
+          PY
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crm-branch-browser-smoke
+          path: |
+            /tmp/crm-local-branch.png
+            /tmp/crm-remote-preview.png
+          if-no-files-found: ignore
