@@ -71,6 +71,7 @@ function loadUiEnhancements(){
   add('script[data-tm-regions-ui]','regions-ui.js?v=20260921-1708','tmRegionsUi');
   add('script[data-tm-calls-ui]','calls-supabase-ui.js?v=20260921-2339','tmCallsUi');
   add('script[data-tm-ownership-guard]','ownership-guard.js?v=20260922-0815','tmOwnershipGuard');
+  add('script[data-tm-brand-accent]','ui-brand-accent.js?v=20260922-1315','tmBrandAccent');
 }
 
 function followupAtivo(){
