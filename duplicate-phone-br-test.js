@@ -19,10 +19,16 @@ function install(){
   };
   c.__phoneBrTestWrapped=true;
   try{console.info('[CRM DUP TEST] comparação BR ativa: 10/11 dígitos nacionais = 55 + número');}catch(e){}
-  try{
-    if(window.CRM_DUPLICATES_UI&&typeof window.CRM_DUPLICATES_UI.refresh==='function')
-      window.CRM_DUPLICATES_UI.refresh();
-  }catch(e){}
+  function refreshDup(){
+    try{
+      if(window.CRM_DUPLICATES&&typeof window.CRM_DUPLICATES.refresh==='function'){
+        window.CRM_DUPLICATES.refresh();
+        return;
+      }
+    }catch(e){}
+    setTimeout(refreshDup,120);
+  }
+  refreshDup();
 }
 
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
