@@ -47,6 +47,10 @@ function loadUiEnhancements(){
   add('script[data-tm-estagio-ui]','stage-ui.js?v=20260922-1540','tmEstagioUi');
   add('script[data-tm-brand-accent]','ui-brand-accent.js?v=20260922-1540','tmBrandAccent');
   add('script[data-tm-modern-glow]','ui-modern-glow.js?v=20260922-1540','tmModernGlow');
+  add('script[data-tm-contact-copy-all]','contact-copy-all-ui.js?v=20260923-1234','tmContactCopyAll');
+  add('script[data-tm-edit-identity-guard]','edit-identity-guard.js?v=20260923-1234','tmEditIdentityGuard');
+  add('script[data-tm-daily-kanban-origins]','daily-kanban-origins-ui.js?v=20260923-1234','tmDailyKanbanOrigins');
+  add('script[data-tm-regions-ui]','regions-ui.js?v=20260923-1234','tmRegionsUi');
 }
 function followupAtivo(){var p=document.getElementById('page-followup');return !!(p&&p.classList.contains('active'));}
 function reloadSoon(forceFull){
