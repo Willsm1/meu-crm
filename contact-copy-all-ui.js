@@ -1,52 +1,90 @@
-/* Taurus Magnum CRM — copy contact across all CRM views
- * Reuses the same interaction already approved in Carteira without changing data.
+/* Taurus Magnum CRM — copy visible lead phones across all CRM views
+ * Branch test: robust delegated click. Does not alter lead data.
  */
 (function(){
 'use strict';
-if(window.__TM_CONTACT_COPY_ALL__)return;
-window.__TM_CONTACT_COPY_ALL__=true;
-var timer=null;
+if(window.__TM_CONTACT_COPY_ALL_V2__)return;
+window.__TM_CONTACT_COPY_ALL_V2__=true;
+
 function digits(v){return String(v||'').replace(/\D/g,'');}
-function phoneMap(){
-  var m=new Map();
+function brKey(v){
+  var d=digits(v);
+  if(d.length===10||d.length===11)return '55'+d;
+  if((d.length===12||d.length===13)&&d.indexOf('55')===0)return d;
+  return d;
+}
+function phoneIndex(){
+  var exact=new Map(),canon=new Map();
   (Array.isArray(window.leads)?window.leads:[]).forEach(function(l){
-    var d=digits(l&&l.telefone);if(d.length>=8&&!m.has(d))m.set(d,String(l.telefone||d));
+    var raw=String(l&&l.telefone||'').trim(),d=digits(raw);if(d.length<8)return;
+    exact.set(d,raw||d);
+    var k=brKey(d);if(k)canon.set(k,raw||d);
   });
-  return m;
+  return {exact:exact,canon:canon};
 }
-function excluded(el){
-  if(!el||!el.closest)return true;
-  return !!el.closest('script,style,input,textarea,select,button,a,.contact-copy,.tm-contact-copy,[contenteditable="true"]');
+function isUiControl(el){return !!(el&&el.closest&&el.closest('input,textarea,select,button,a,[contenteditable="true"]'));}
+function candidatesFromText(txt){
+  txt=String(txt||'');
+  var out=[],m,re=/(?:\+?55[\s().-]*)?(?:\(?\d{2}\)?[\s.-]*)?\d{4,5}[\s.-]*\d{4}/g;
+  while((m=re.exec(txt))!==null){var d=digits(m[0]);if(d.length>=8&&d.length<=13)out.push({raw:m[0],digits:d});}
+  return out;
 }
-function decorate(root){
-  root=root||document;
-  var map=phoneMap();if(!map.size)return;
-  var walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
-    if(!n||!n.parentElement||excluded(n.parentElement))return NodeFilter.FILTER_REJECT;
-    var raw=String(n.nodeValue||'').trim();if(!raw)return NodeFilter.FILTER_REJECT;
-    var d=digits(raw);return d.length>=8&&map.has(d)?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;
-  }});
-  var nodes=[],n;while((n=walker.nextNode()))nodes.push(n);
-  nodes.forEach(function(t){
-    if(!t.parentNode)return;
-    var raw=String(t.nodeValue||'').trim(),d=digits(raw),phone=map.get(d);if(!phone)return;
-    var span=document.createElement('span');span.className='tm-contact-copy';span.dataset.phone=encodeURIComponent(phone);
-    span.title='Clique para copiar';span.textContent=raw;
-    span.style.cssText='cursor:pointer;display:inline-block;transition:color .15s,text-shadow .15s;color:inherit';
-    t.parentNode.replaceChild(span,t);
+function resolvePhone(el){
+  var idx=phoneIndex();
+  var cur=el;
+  for(var depth=0;cur&&depth<5;depth++,cur=cur.parentElement){
+    if(cur===document.body)break;
+    var txt=String(cur.innerText||cur.textContent||'').trim();
+    if(!txt)continue;
+    var cs=candidatesFromText(txt);
+    for(var i=0;i<cs.length;i++){
+      var d=cs[i].digits;
+      if(idx.exact.has(d))return {phone:idx.exact.get(d),display:cs[i].raw,node:cur};
+      var k=brKey(d);
+      if(k&&idx.canon.has(k))return {phone:idx.canon.get(k),display:cs[i].raw,node:cur};
+    }
+  }
+  return null;
+}
+function fallbackCopy(txt){
+  var ta=document.createElement('textarea');ta.value=txt;ta.setAttribute('readonly','');
+  ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');}finally{ta.remove();}
+}
+function flash(node){
+  if(!node)return;
+  var oldTitle=node.getAttribute('title'),oldColor=node.style.color;
+  node.setAttribute('title','Copiado');node.style.color='#86efac';
+  node.classList.add('tm-contact-copied');
+  setTimeout(function(){node.classList.remove('tm-contact-copied');node.style.color=oldColor||'';if(oldTitle===null)node.removeAttribute('title');else node.setAttribute('title',oldTitle);},900);
+}
+function copyResolved(r){
+  var txt=String(r&&r.phone||'').trim();if(!txt)return;
+  function ok(){flash(r.node);try{if(typeof showToast==='function')showToast('Contato copiado');}catch(e){}}
+  try{
+    if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(txt).then(ok).catch(function(){fallbackCopy(txt);ok();});
+    else{fallbackCopy(txt);ok();}
+  }catch(e){fallbackCopy(txt);ok();}
+}
+function markVisible(){
+  var idx=phoneIndex();if(!idx.exact.size&&!idx.canon.size)return;
+  document.querySelectorAll('td, .k-card, #page-followup tr, #page-quentes [class], #page-retomar [class]').forEach(function(el){
+    if(isUiControl(el))return;
+    var cs=candidatesFromText(el.innerText||el.textContent||'');
+    var hit=cs.some(function(c){return idx.exact.has(c.digits)||idx.canon.has(brKey(c.digits));});
+    if(hit){el.classList.add('tm-phone-copy-zone');el.title=el.title||'Clique no telefone para copiar';}
   });
 }
-function copy(el,ev){
-  if(ev){ev.preventDefault();ev.stopPropagation();}
-  var p='';try{p=decodeURIComponent(el.dataset.phone||'');}catch(e){p=el.dataset.phone||'';}p=String(p||'').trim();if(!p)return;
-  if(typeof window.copiarContato==='function')return window.copiarContato(el,ev);
-  function done(){var old=el.textContent;el.textContent='Copiado';el.style.color='#86efac';setTimeout(function(){el.textContent=old;el.style.color='';},1100);}
-  function fallback(){var ta=document.createElement('textarea');ta.value=p;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}finally{ta.remove();}done();}
-  try{if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(p).then(done).catch(fallback);else fallback();}catch(e){fallback();}
-}
-function schedule(){clearTimeout(timer);timer=setTimeout(function(){decorate(document);},80);}
-document.addEventListener('click',function(ev){var el=ev.target&&ev.target.closest&&ev.target.closest('.tm-contact-copy');if(el)copy(el,ev);},true);
-var st=document.createElement('style');st.textContent='.tm-contact-copy:hover{color:#86efac!important;text-shadow:0 0 12px rgba(134,239,172,.18)}';document.head.appendChild(st);
-function boot(){decorate(document);new MutationObserver(schedule).observe(document.body,{childList:true,subtree:true});window.addEventListener('CRM_UPDATED',schedule);}
+var markTimer=null;
+function scheduleMark(){clearTimeout(markTimer);markTimer=setTimeout(markVisible,100);}
+document.addEventListener('click',function(ev){
+  if(isUiControl(ev.target))return;
+  var r=resolvePhone(ev.target);if(!r)return;
+  ev.preventDefault();ev.stopPropagation();copyResolved(r);
+},true);
+var st=document.createElement('style');
+st.textContent='.tm-phone-copy-zone{cursor:pointer}.tm-phone-copy-zone:hover{color:#dbeafe}.tm-contact-copied{color:#86efac!important;text-shadow:0 0 12px rgba(134,239,172,.18)}';
+document.head.appendChild(st);
+function boot(){markVisible();new MutationObserver(scheduleMark).observe(document.body,{childList:true,subtree:true,characterData:true});window.addEventListener('focus',scheduleMark);}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
