@@ -42,11 +42,16 @@ function loadUiEnhancements(){
   add('script[data-tm-ui-labels]','ui-labels.js?v=20260920-1038','tmUiLabels');
   add('script[data-tm-notifications]','notifications-ui.js?v=20260920-1134','tmNotifications');
   add('script[data-tm-duplicates]','duplicates-ui.js?v=20260920-1739','tmDuplicates');
+  add('script[data-tm-dup-phone-br-test]','duplicate-phone-br-test.js?v=20260923-1248','tmDupPhoneBrTest');
   add('script[data-tm-kanban-scroll]','kanban-scroll-fix.js?v=20260920-2038','tmKanbanScroll');
   add('script[data-tm-followup-completed-queue]','followup-completed-queue-fix.js?v=20260920-2326','tmFollowupCompletedQueue');
   add('script[data-tm-estagio-ui]','stage-ui.js?v=20260922-1540','tmEstagioUi');
   add('script[data-tm-brand-accent]','ui-brand-accent.js?v=20260922-1540','tmBrandAccent');
   add('script[data-tm-modern-glow]','ui-modern-glow.js?v=20260922-1540','tmModernGlow');
+  add('script[data-tm-contact-copy-all]','contact-copy-all-ui.js?v=20260923-1310','tmContactCopyAll');
+  add('script[data-tm-edit-identity-guard]','edit-identity-guard.js?v=20260923-1234','tmEditIdentityGuard');
+  add('script[data-tm-daily-kanban-origins]','daily-kanban-origins-ui.js?v=20260923-1234','tmDailyKanbanOrigins');
+  add('script[data-tm-regions-ui]','regions-ui.js?v=20260923-1234','tmRegionsUi');
 }
 function followupAtivo(){var p=document.getElementById('page-followup');return !!(p&&p.classList.contains('active'));}
 function reloadSoon(forceFull){
