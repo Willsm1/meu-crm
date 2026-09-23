@@ -42,6 +42,7 @@ function loadUiEnhancements(){
   add('script[data-tm-ui-labels]','ui-labels.js?v=20260920-1038','tmUiLabels');
   add('script[data-tm-notifications]','notifications-ui.js?v=20260920-1134','tmNotifications');
   add('script[data-tm-duplicates]','duplicates-ui.js?v=20260920-1739','tmDuplicates');
+  add('script[data-tm-dup-phone-br-test]','duplicate-phone-br-test.js?v=20260923-1248','tmDupPhoneBrTest');
   add('script[data-tm-kanban-scroll]','kanban-scroll-fix.js?v=20260920-2038','tmKanbanScroll');
   add('script[data-tm-followup-completed-queue]','followup-completed-queue-fix.js?v=20260920-2326','tmFollowupCompletedQueue');
   add('script[data-tm-estagio-ui]','stage-ui.js?v=20260922-1540','tmEstagioUi');
