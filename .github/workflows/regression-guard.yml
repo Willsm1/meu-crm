@@ -41,4 +41,10 @@ jobs:
             exit 1
           fi
           OUT="$($CHROME --headless --no-sandbox --disable-gpu --virtual-time-budget=3000 --dump-dom http://127.0.0.1:8765/tools/performance_browser_harness.html)"
-          echo "$OUT" | grep 'data-result="PASS"'
+          if echo "$OUT" | grep -q 'data-result="PASS"'; then
+            echo 'FOLLOWUP_BROWSER_SMOKE: PASS'
+          else
+            echo 'FOLLOWUP_BROWSER_SMOKE: FAIL'
+            echo "$OUT" | grep -o 'data-result="[A-Z]*"[^>]*>[^<]*' || true
+            exit 1
+          fi
