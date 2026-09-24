@@ -3,28 +3,45 @@
 'use strict';
 if(window.__TM_FOLLOWUP_RENDER_HUB__)return;
 window.__TM_FOLLOWUP_RENDER_HUB__=true;
-var wrapped=false,retries=0,emitting=false;
+var wrapped=false,retries=0,queued=false,obs=null,observedTb=null;
 function emit(){
-  if(emitting)return;
-  emitting=true;
-  try{document.dispatchEvent(new CustomEvent('tm:followup-rendered'));}catch(e){}
-  finally{emitting=false;}
+  if(queued)return;
+  queued=true;
+  queueMicrotask(function(){
+    queued=false;
+    try{document.dispatchEvent(new CustomEvent('tm:followup-rendered'));}catch(e){}
+  });
+}
+function observeTable(){
+  var tb=document.getElementById('fu-tbody');
+  if(!tb)return false;
+  if(observedTb===tb&&obs)return true;
+  if(obs)try{obs.disconnect();}catch(e){}
+  observedTb=tb;
+  obs=new MutationObserver(function(muts){
+    for(var i=0;i<muts.length;i++){
+      if(muts[i].type==='childList'){emit();break;}
+    }
+  });
+  obs.observe(tb,{childList:true});
+  return true;
 }
 function install(){
-  if(wrapped)return true;
-  if(typeof window.fuRenderFila!=='function'){
-    if(retries++<80)setTimeout(install,100);
-    return false;
+  observeTable();
+  if(!wrapped&&typeof window.fuRenderFila==='function'){
+    var original=window.fuRenderFila;
+    window.fuRenderFila=function(){
+      var out=original.apply(this,arguments);
+      emit();
+      return out;
+    };
+    wrapped=true;
   }
-  var original=window.fuRenderFila;
-  window.fuRenderFila=function(){
-    var out=original.apply(this,arguments);
-    emit();
-    return out;
-  };
-  wrapped=true;
+  if(!wrapped||!observedTb){
+    if(retries++<80)setTimeout(install,100);
+  }
   emit();
-  return true;
+  return wrapped||!!observedTb;
 }
 window.TM_FOLLOWUP_POST_RENDER={schedule:emit,install:install};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
