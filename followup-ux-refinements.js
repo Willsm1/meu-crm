@@ -3,8 +3,8 @@
 'use strict';
 if(window.__TM_FOLLOWUP_UX_REFINEMENTS__)return;
 window.__TM_FOLLOWUP_UX_REFINEMENTS__=true;
-var originalRender=null,wrapped=false,refreshUiWrapped=false,refineTimer=null,pageObserver=null,commitTimer=null;
-var commitments=new Map();
+var originalRender=null,wrapped=false,searchBound=false,refreshUiWrapped=false,refineTimer=null,pageObserver=null,commitTimer=null,searchFrame=null;
+var commitments=new Map(),searchIndex=new Map();
 function rpc(name,args){var a=window.CRM_CANONICAL;if(!a||typeof a.rpc!=='function')return Promise.reject(new Error('CRM_CANONICAL indisponível'));return a.rpc(name,args||{});}
 function linhas(){try{var a=window.CRM_FOLLOWUP;return a&&typeof a.linhas==='function'?(a.linhas()||[]):[];}catch(e){return[];}}
 function mapa(){var m=new Map();linhas().forEach(function(x){m.set(String(x.lead_id),x);});return m;}
@@ -26,11 +26,7 @@ function instalarCadencia(){
 function filaAtiva(){var p=document.getElementById('page-followup');return !!(p&&p.classList.contains('active'));}
 function syncAtualizar(){
   var b=document.getElementById('refresh-btn'),active=filaAtiva();
-  if(b){
-    b.hidden=active;
-    if(active)b.style.setProperty('display','none','important');
-    else{b.hidden=false;b.style.removeProperty('display');}
-  }
+  if(b){b.hidden=active;if(active)b.style.setProperty('display','none','important');else{b.hidden=false;b.style.removeProperty('display');}}
   var q=document.getElementById('fu-busca');if(q)q.placeholder='Buscar nome, empresa, executivo, email ou telefone...';
 }
 function atualizarCommitments(){
@@ -57,37 +53,53 @@ function syncContador(){
   var m=t.match(/\s·\s(atualizado\s.+)$/i);if(m)suf=' · '+m[1];
   e.textContent=n+' lead(s) na fila'+suf;
 }
-function aplicarBuscaCarteira(q){
-  var termo=String(q||'').trim().toLowerCase();
-  var ids=new Set();
+function rebuildSearchIndex(){
+  var next=new Map();
   linhas().forEach(function(x){
-    var mq=!termo||[x.nome,x.empresa,x.responsavel,x.email,x.telefone].some(function(f){return String(f||'').toLowerCase().includes(termo);});
-    if(mq)ids.add(String(x.lead_id));
+    next.set(String(x.lead_id),[x.nome,x.empresa,x.responsavel,x.email,x.telefone].map(function(f){return String(f||'').toLowerCase();}).join('\u001f'));
   });
-  var tb=document.getElementById('fu-tbody');if(!tb)return;
+  searchIndex=next;
+}
+function aplicarBuscaCarteira(q){
+  var termo=String(q||'').trim().toLowerCase(),tb=document.getElementById('fu-tbody');if(!tb)return;
+  var n=0;
   tb.querySelectorAll('tr').forEach(function(tr){
     var btn=tr.querySelector('.tm-agendar-btn[data-lead-id]');if(!btn)return;
-    tr.style.display=ids.has(String(btn.dataset.leadId))?'':'none';
+    var hay=searchIndex.get(String(btn.dataset.leadId))||'',ok=!termo||hay.indexOf(termo)>=0;
+    var novo=ok?'':'none';if(tr.style.display!==novo)tr.style.display=novo;if(ok)n++;
   });
+  var e=document.getElementById('fu-estado');if(e){var t=String(e.textContent||''),m=t.match(/\s·\s(atualizado\s.+)$/i);e.textContent=n+' lead(s) na fila'+(m?' · '+m[1]:'');}
+}
+function onSearchInput(){
+  var input=document.getElementById('fu-busca');if(!input)return;
+  if(searchFrame)cancelAnimationFrame(searchFrame);
+  searchFrame=requestAnimationFrame(function(){searchFrame=null;aplicarBuscaCarteira(input.value);});
 }
 function instalarBusca(){
-  if(wrapped||typeof window.fuRenderFila!=='function')return false;
+  var input=document.getElementById('fu-busca');
+  if(input&&!searchBound){
+    input.removeAttribute('oninput');input.oninput=null;input.addEventListener('input',onSearchInput,{passive:true});searchBound=true;
+  }
+  if(wrapped||typeof window.fuRenderFila!=='function')return !!wrapped;
   originalRender=window.fuRenderFila;wrapped=true;
   window.fuRenderFila=function(){
-    var input=document.getElementById('fu-busca'),raw=String(input&&input.value||'');
-    if(input)input.value='';
+    var inp=document.getElementById('fu-busca'),raw=String(inp&&inp.value||'');
+    if(inp)inp.value='';
     var out=originalRender.apply(this,arguments);
-    if(input)input.value=raw;
+    if(inp)inp.value=raw;
+    rebuildSearchIndex();
     aplicarBuscaCarteira(raw);
-    refinarLinhas();syncAtualizar();syncContador();
+    queueRefine();
     return out;
   };
+  rebuildSearchIndex();
+  aplicarBuscaCarteira(input&&input.value||'');
   return true;
 }
 function instalarRefreshUi(){
   if(refreshUiWrapped||typeof window.TM_FOLLOWUP_REFRESH_UI!=='function')return false;
   var old=window.TM_FOLLOWUP_REFRESH_UI;refreshUiWrapped=true;
-  window.TM_FOLLOWUP_REFRESH_UI=function(){var r=old.apply(this,arguments);refinarLinhas();syncAtualizar();syncContador();return r;};
+  window.TM_FOLLOWUP_REFRESH_UI=function(){var r=old.apply(this,arguments);queueRefine();return r;};
   return true;
 }
 function motivos(){return '<option value="">Selecione o motivo...</option><option>Cliente Cancelou</option><option>Cliente Sumiu</option><option>Remarcamos</option><option>Realizado S/ Follow Up</option>';}
@@ -102,10 +114,10 @@ function css(){if(document.getElementById('tm-followup-refine-style'))return;var
 function boot(){
   css();instalarCadencia();syncAtualizar();instalarBusca();instalarRefreshUi();atualizarCommitments();queueRefine();
   var p=document.getElementById('page-followup');if(p){pageObserver=new MutationObserver(function(){syncAtualizar();if(filaAtiva())queueRefine();});pageObserver.observe(p,{attributes:true,attributeFilter:['class']});}
-  var tries=0,t=setInterval(function(){tries++;instalarBusca();instalarRefreshUi();syncAtualizar();if((wrapped&&refreshUiWrapped)||tries>80)clearInterval(t);},100);
+  var tries=0,t=setInterval(function(){tries++;instalarBusca();instalarRefreshUi();syncAtualizar();if((wrapped&&searchBound&&refreshUiWrapped)||tries>80)clearInterval(t);},100);
   window.addEventListener('focus',function(){syncAtualizar();atualizarCommitments();queueRefine();});
   window.addEventListener('click',function(e){var btn=e.target&&e.target.closest&&e.target.closest('.tm-agendar-btn[data-tm-commit-cancel="1"]');if(!btn)return;var c=commitments.get(String(btn.dataset.leadId));if(!c)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();abrirCancelar(c);},true);
-  window.addEventListener('message',function(ev){if(ev.source===window&&ev.data&&ev.data.type==='CRM_UPDATED'){setTimeout(function(){atualizarCommitments();queueRefine();},250);}});
+  window.addEventListener('message',function(ev){if(ev.source===window&&ev.data&&ev.data.type==='CRM_UPDATED'){setTimeout(function(){rebuildSearchIndex();atualizarCommitments();queueRefine();},250);}});
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
