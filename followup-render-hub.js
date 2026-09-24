@@ -13,6 +13,7 @@ function emit(){
   });
 }
 function observeTable(){
+  if(typeof document==='undefined'||typeof document.getElementById!=='function'||typeof MutationObserver==='undefined')return false;
   var tb=document.getElementById('fu-tbody');
   if(!tb)return false;
   if(observedTb===tb&&obs)return true;
@@ -37,12 +38,12 @@ function install(){
     };
     wrapped=true;
   }
-  if(!wrapped||!observedTb){
+  if((!wrapped||!observedTb)&&typeof document!=='undefined'&&typeof document.getElementById==='function'){
     if(retries++<80)setTimeout(install,100);
   }
   emit();
   return wrapped||!!observedTb;
 }
 window.TM_FOLLOWUP_POST_RENDER={schedule:emit,install:install};
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
+if(typeof document!=='undefined'&&document.readyState==='loading'&&typeof document.addEventListener==='function')document.addEventListener('DOMContentLoaded',install);else install();
 })();
