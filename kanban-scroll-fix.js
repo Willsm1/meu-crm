@@ -42,6 +42,17 @@ function fuIdFromRow(row){
   return old?String(old.id).slice(5):'';
 }
 function fuMap(){var m={};fuLines().forEach(function(x){m[String(x.lead_id)]=x;});return m;}
+function cadenciaDiasSemContato(x){
+  var a=Array.isArray(x&&x.cadencia_7d)?x.cadencia_7d.slice():[];
+  if(!a.length)return 7;
+  a.sort(function(p,q){return String(p&&p.data||'').localeCompare(String(q&&q.data||''));});
+  var n=0;
+  for(var i=a.length-1;i>=0;i--){
+    if(a[i]&&a[i].falou)break;
+    n++;
+  }
+  return n;
+}
 
 function ensureGoldToggle(goldCount){
   var p=document.getElementById('fu-prio');
@@ -77,15 +88,17 @@ function sortArrow(btn,active,dir){
 }
 function refreshHeaderSortUI(){
   var s=document.querySelector('[data-tm-fu-sort="status"]');
+  var c=document.querySelector('[data-tm-fu-sort="cadencia"]');
   var p=document.querySelector('[data-tm-fu-sort="parado"]');
   sortArrow(s,fuSortKey==='status',fuSortDir);
+  sortArrow(c,fuSortKey==='cadencia',fuSortDir);
   sortArrow(p,fuSortKey==='parado',fuSortDir);
 }
 function cycleSort(key){
   clearInteractionSort();
-  if(fuSortKey!==key){fuSortKey=key;fuSortDir=(key==='parado'?-1:1);}
-  else if(key==='parado'&&fuSortDir===-1)fuSortDir=1;
-  else if(key==='status'&&fuSortDir===1)fuSortDir=-1;
+  var initial=(key==='status'?1:-1);
+  if(fuSortKey!==key){fuSortKey=key;fuSortDir=initial;}
+  else if(fuSortDir===initial)fuSortDir=-initial;
   else {fuSortKey='';fuSortDir=0;}
   refreshHeaderSortUI();
   applyFollowupOrder();
@@ -101,6 +114,7 @@ function ensureHeaderSort(){
     th.appendChild(b);b.addEventListener('click',function(ev){ev.preventDefault();ev.stopPropagation();cycleSort(key);});
   }
   add(hs[2],'status','Agrupar por status / inverter ordem / limpar');
+  add(hs[5],'cadencia','Mais dias consecutivos sem contato / menos dias / limpar');
   add(hs[6],'parado','Mais tempo parado / menos tempo parado / limpar');
   refreshHeaderSortUI();
 }
@@ -115,6 +129,8 @@ function applyFollowupOrder(){
     if(fuSortKey==='status'){
       va=Object.prototype.hasOwnProperty.call(FU_STATUS_ORDER,String(xa.status||''))?FU_STATUS_ORDER[String(xa.status||'')]:99;
       vb=Object.prototype.hasOwnProperty.call(FU_STATUS_ORDER,String(xb.status||''))?FU_STATUS_ORDER[String(xb.status||'')]:99;
+    }else if(fuSortKey==='cadencia'){
+      va=cadenciaDiasSemContato(xa);vb=cadenciaDiasSemContato(xb);
     }else{
       va=Number(xa.dias_parado);vb=Number(xb.dias_parado);
       if(!isFinite(va))va=-1;if(!isFinite(vb))vb=-1;
@@ -161,7 +177,7 @@ function installFollowupLayout(){
       '#page-followup .tm-followup-scroll th:nth-child(3){width:10%!important;white-space:nowrap!important}',
       '#page-followup .tm-followup-scroll th:nth-child(4){width:7%!important}',
       '#page-followup .tm-followup-scroll th:nth-child(5){width:7%!important}',
-      '#page-followup .tm-followup-scroll th:nth-child(6){width:10%!important}',
+      '#page-followup .tm-followup-scroll th:nth-child(6){width:10%!important;white-space:nowrap!important}',
       '#page-followup .tm-followup-scroll th:nth-child(7){width:6%!important;white-space:nowrap!important}',
       '#page-followup .tm-followup-scroll th:nth-child(8){width:10%!important}',
       '#page-followup .tm-followup-scroll th:nth-child(9){width:9%!important}',
