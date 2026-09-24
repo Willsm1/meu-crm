@@ -3,7 +3,7 @@
 'use strict';
 if(window.__TM_FOLLOWUP_SEARCH_FASTFIX__)return;
 window.__TM_FOLLOWUP_SEARCH_FASTFIX__=true;
-var frame=null,observer=null,boundInput=null,wrapped=false;
+var frame=null,boundInput=null;
 function norm(v){
   var s=String(v==null?'':v).toLowerCase();
   try{s=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'');}catch(e){}
@@ -52,20 +52,10 @@ function replaceAndBindInput(){
   clone.addEventListener('input',schedule,{passive:true});
   return true;
 }
-function wrapRender(){
-  if(wrapped||typeof window.fuRenderFila!=='function')return;
-  var old=window.fuRenderFila;wrapped=true;
-  window.fuRenderFila=function(){var r=old.apply(this,arguments);schedule();return r;};
-}
-function watchTable(){
-  var tb=tbody();if(!tb){setTimeout(watchTable,120);return;}
-  if(observer)observer.disconnect();
-  observer=new MutationObserver(function(){schedule();});
-  observer.observe(tb,{childList:true,subtree:true});
-}
 function boot(){
-  var tries=0,t=setInterval(function(){tries++;replaceAndBindInput();wrapRender();if(boundInput&&wrapped||tries>80)clearInterval(t);},100);
-  replaceAndBindInput();wrapRender();watchTable();schedule();
+  var tries=0,t=setInterval(function(){tries++;replaceAndBindInput();if(boundInput||tries>80)clearInterval(t);},100);
+  replaceAndBindInput();schedule();
+  document.addEventListener('tm:followup-rendered',schedule);
   document.addEventListener('change',function(e){if(e.target&&/^(fu-prio|fu-resp)$/.test(e.target.id||''))setTimeout(schedule,0);},true);
   window.addEventListener('focus',schedule);
   window.addEventListener('message',function(ev){if(ev.source===window&&ev.data&&ev.data.type==='CRM_UPDATED')setTimeout(schedule,120);});
