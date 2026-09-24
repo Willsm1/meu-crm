@@ -39,7 +39,7 @@ function loadUiEnhancements(){
   add('script[data-tm-followup-commitments]','followup-commitment-ui.js?v=20260923-2325','tmFollowupCommitments');
   add('script[data-tm-followup-schedule]','followup-schedule-ui.js?v=20260920-1455','tmFollowupSchedule');
   add('script[data-tm-followup-agendar]','followup-agendar-ui.js?v=20260920-1455','tmFollowupAgendar');
-  add('script[data-tm-followup-refinements]','followup-ux-refinements.js?v=20260923-2345','tmFollowupRefinements');
+  add('script[data-tm-followup-refinements]','followup-ux-refinements.js?v=20260923-2350','tmFollowupRefinements');
   add('script[data-tm-gesture-guard]','gesture-navigation-guard.js?v=20260920-1148','tmGestureGuard');
   add('script[data-tm-ui-labels]','ui-labels.js?v=20260920-1038','tmUiLabels');
   add('script[data-tm-notifications]','notifications-ui.js?v=20260920-1134','tmNotifications');
@@ -52,7 +52,7 @@ function loadUiEnhancements(){
   add('script[data-tm-modern-glow]','ui-modern-glow.js?v=20260922-1540','tmModernGlow');
   add('script[data-tm-contact-copy-all]','contact-copy-all-ui.js?v=20260923-1310','tmContactCopyAll');
   add('script[data-tm-edit-identity-guard]','edit-identity-guard.js?v=20260923-1234','tmEditIdentityGuard');
-  add('script[data-tm-daily-kanban-origins]','daily-kanban-origins-ui.js?v=20260923-2345','tmDailyKanbanOrigins');
+  add('script[data-tm-daily-kanban-origins]','daily-kanban-origins-ui.js?v=20260923-2350','tmDailyKanbanOrigins');
   add('script[data-tm-regions-ui]','regions-ui.js?v=20260923-1234','tmRegionsUi');
 }
 function followupAtivo(){var p=document.getElementById('page-followup');return !!(p&&p.classList.contains('active'));}
