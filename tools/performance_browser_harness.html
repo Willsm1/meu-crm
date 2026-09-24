@@ -68,7 +68,7 @@
     if(!sandro||!ana)throw new Error('schedule buttons were not restored');
     if(String(sandro.cells[8].textContent||'').trim()!=='Em dia')throw new Error('displayed today outbound should be Em dia');
     if(String(ana.cells[8].textContent||'').trim()!=='—')throw new Error('old/alternate outbound field incorrectly marked yesterday displayed contact as Em dia');
-    var anaBtn=ana.querySelector('.tm-agendar-btn');anaBtn.click();await sleep(30);
+    var anaBtn=ana.querySelector('.tm-agendar-btn');anaBtn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));await sleep(30);
     if(!document.querySelector('.tm-date-pop'))throw new Error('approved calendar did not open from Agendar');
     document.body.dispatchEvent(new MouseEvent('click',{bubbles:true}));await sleep(20);
 
