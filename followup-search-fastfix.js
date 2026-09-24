@@ -3,7 +3,7 @@
 'use strict';
 if(window.__TM_FOLLOWUP_SEARCH_FASTFIX__)return;
 window.__TM_FOLLOWUP_SEARCH_FASTFIX__=true;
-var frame=null,boundInput=null;
+var timer=null,boundInput=null;
 function norm(v){
   var s=String(v==null?'':v).toLowerCase();
   try{s=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'');}catch(e){}
@@ -30,7 +30,7 @@ function updateCounter(n){
   e.textContent=n+' lead(s) na fila'+(m?' · '+m[1]:'');
 }
 function applyNow(){
-  frame=null;
+  timer=null;
   var q=input(),tb=tbody();if(!q||!tb)return;
   var term=norm(q.value).trim(),map=byId(),n=0;
   var rows=tb.querySelectorAll('tr');
@@ -43,7 +43,7 @@ function applyNow(){
   }
   updateCounter(n);
 }
-function schedule(){if(frame)cancelAnimationFrame(frame);frame=requestAnimationFrame(applyNow);}
+function schedule(){if(timer)clearTimeout(timer);timer=setTimeout(applyNow,0);}
 function replaceAndBindInput(){
   var q=input();if(!q)return false;
   if(boundInput===q)return true;
