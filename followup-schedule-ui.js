@@ -10,8 +10,8 @@ function mapaLinhas(){var m=new Map();linhas().forEach(function(x){m.set(String(
 function localDateKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function hojeKey(){return localDateKey(new Date());}
 function dateKey(v){if(!v)return'';var s=String(v),m=s.match(/^(\d{4}-\d{2}-\d{2})/);if(m)return m[1];var d=new Date(v);return isNaN(d)?'':localDateKey(d);}
-/* Regra de produto: Em dia somente quando EU FALEI hoje. */
-function falouHoje(x){return dateKey(x&&x.ult_meu)===hojeKey();}
+/* Regra de produto: Em dia usa EXATAMENTE a mesma fonte exibida em EU FALEI. */
+function falouHoje(x){return dateKey(x&&x.ultimo_contato)===hojeKey();}
 function dataBR(iso){if(!iso)return '—';var p=String(iso).slice(0,10).split('-');return p.length===3?p[2]+'/'+p[1]:'—';}
 function horaBR(iso){if(!iso||String(iso).length<=10)return '';var d=new Date(iso);if(isNaN(d))return '';return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
 function concluida(x){return !!(x&&(x.tarefa_concluida||x.prioridade==='concluido'));}
