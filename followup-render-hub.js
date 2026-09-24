@@ -12,6 +12,9 @@ function emit(){
     try{document.dispatchEvent(new CustomEvent('tm:followup-rendered'));}catch(e){}
   });
 }
+function hasLegacyRender(tb){
+  try{return !!(tb&&tb.querySelector&&tb.querySelector('input[id^="fu-d-"]'));}catch(e){return false;}
+}
 function observeTable(){
   if(typeof document==='undefined'||typeof document.getElementById!=='function'||typeof MutationObserver==='undefined')return false;
   var tb=document.getElementById('fu-tbody');
@@ -20,6 +23,9 @@ function observeTable(){
   if(obs)try{obs.disconnect();}catch(e){}
   observedTb=tb;
   obs=new MutationObserver(function(muts){
+    /* Só sinaliza quando o render legado reapareceu. Reordenação, filtros e
+       decorações da tabela não podem disparar um novo ciclo de pós-render. */
+    if(!hasLegacyRender(tb))return;
     for(var i=0;i<muts.length;i++){
       if(muts[i].type==='childList'){emit();break;}
     }
