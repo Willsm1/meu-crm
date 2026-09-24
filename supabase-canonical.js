@@ -8,7 +8,6 @@
 var _snap = new Map();
 var _uuidByLocalId = new Map();
 var _saveChain = Promise.resolve();
-var _refreshTimer = null;
 
 function cfg(){ return (window.CRM_SUPABASE && window.CRM_SUPABASE.config) || null; }
 function token(){
@@ -272,25 +271,8 @@ function esconderLegado(){
   }catch(e){}
 }
 
-window.addEventListener('message',function(ev){
-  if(ev.source!==window || !ev.data || ev.data.type!=='CRM_UPDATED') return;
-  clearTimeout(_refreshTimer);
-  _refreshTimer=setTimeout(function(){
-    if(!papelValido()) return;
-    if(window.CRM_SCOPE&&typeof window.CRM_SCOPE.reload==='function'){
-      window.CRM_SCOPE.reload();
-      return;
-    }
-    if(camadaEscopoPresente()) return;
-    carregarNaTela().then(function(){
-      try{
-        var pg=document.getElementById('page-followup');
-        if(pg && pg.classList.contains('active') && window.CRM_FOLLOWUP && window.CRM_FOLLOWUP.carregar)
-          window.CRM_FOLLOWUP.carregar();
-      }catch(e){}
-    });
-  },500);
-});
+/* CRM_UPDATED e Supabase Realtime sao coordenados em supabase-realtime.js.
+   Esta camada nao registra um segundo reload global. */
 
 function bootstrap(){
   esconderLegado();
