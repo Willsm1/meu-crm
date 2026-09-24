@@ -6,18 +6,8 @@ window.__TM_FOLLOWUP_UX_REFINEMENTS__=true;
 var originalRender=null,wrapped=false,refreshUiWrapped=false,refineTimer=null,pageObserver=null,commitTimer=null;
 var commitments=new Map();
 function rpc(name,args){var a=window.CRM_CANONICAL;if(!a||typeof a.rpc!=='function')return Promise.reject(new Error('CRM_CANONICAL indisponível'));return a.rpc(name,args||{});}
-function digits(v){return String(v||'').replace(/\D/g,'');}
-function localKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
-function dateKey(v){if(!v)return'';var s=String(v);var m=s.match(/^(\d{4}-\d{2}-\d{2})/);if(m)return m[1];var d=new Date(v);return isNaN(d)?'':localKey(d);}
 function linhas(){try{var a=window.CRM_FOLLOWUP;return a&&typeof a.linhas==='function'?(a.linhas()||[]):[];}catch(e){return[];}}
 function mapa(){var m=new Map();linhas().forEach(function(x){m.set(String(x.lead_id),x);});return m;}
-function falouHoje(x){
-  var h=localKey(new Date());
-  if(dateKey(x&&x.ultimo_contato)===h||dateKey(x&&x.ult_meu)===h)return true;
-  var a=Array.isArray(x&&x.cadencia_7d)?x.cadencia_7d:[];
-  for(var i=0;i<a.length;i++){if(dateKey(a[i]&&a[i].data)===h)return !!a[i].falou;}
-  return false;
-}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function dataBR(v){if(!v)return'—';var p=String(v).slice(0,10).split('-');return p.length===3?p[2]+'/'+p[1]:'—';}
 function dtBR(v){if(!v)return'—';var d=new Date(v);if(isNaN(d))return'—';return d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});}
@@ -41,7 +31,7 @@ function syncAtualizar(){
     if(active)b.style.setProperty('display','none','important');
     else{b.hidden=false;b.style.removeProperty('display');}
   }
-  var q=document.getElementById('fu-busca');if(q)q.placeholder='Buscar nome ou telefone...';
+  var q=document.getElementById('fu-busca');if(q)q.placeholder='Buscar nome, empresa, executivo, email ou telefone...';
 }
 function atualizarCommitments(){
   clearTimeout(commitTimer);
@@ -52,11 +42,6 @@ function refinarLinhas(){
   tb.querySelectorAll('tr').forEach(function(tr){
     var btn=tr.querySelector('.tm-agendar-btn[data-lead-id]');if(!btn)return;
     var id=String(btn.dataset.leadId),x=m.get(id),c=commitments.get(id);if(!x)return;
-    var td=btn.closest('td'),prio=td&&td.previousElementSibling;
-    if(prio){
-      var chip=prio.querySelector('.tm-fu-chip.ok');
-      if(chip&&String(chip.textContent||'').trim()==='Em dia'&&!falouHoje(x))prio.innerHTML='<span class="tm-fu-chip tm-fu-missed">—</span>';
-    }
     if(c&&c.status==='scheduled'&&c.is_overdue){btn.textContent='Cancelar';btn.dataset.tmCommitCancel='1';}
     else if(btn.dataset.tmCommitCancel){delete btn.dataset.tmCommitCancel;btn.textContent=x.proximo_contato?'Reagendar':'Agendar';}
     if(/^Solicitar cancelamento$/i.test(String(btn.textContent||'').trim()))btn.textContent='Cancelar';
@@ -72,28 +57,37 @@ function syncContador(){
   var m=t.match(/\s·\s(atualizado\s.+)$/i);if(m)suf=' · '+m[1];
   e.textContent=n+' lead(s) na fila'+suf;
 }
-function queueRefine(){clearTimeout(refineTimer);refineTimer=setTimeout(function(){refinarLinhas();syncAtualizar();syncContador();},80);}
-function telefoneDaLinha(tr){var cell=tr&&tr.cells&&tr.cells[0];if(!cell)return'';var div=cell.querySelector('div');return digits(div?div.textContent:cell.textContent);}
+function aplicarBuscaCarteira(q){
+  var termo=String(q||'').trim().toLowerCase();
+  var ids=new Set();
+  linhas().forEach(function(x){
+    var mq=!termo||[x.nome,x.empresa,x.responsavel,x.email,x.telefone].some(function(f){return String(f||'').toLowerCase().includes(termo);});
+    if(mq)ids.add(String(x.lead_id));
+  });
+  var tb=document.getElementById('fu-tbody');if(!tb)return;
+  tb.querySelectorAll('tr').forEach(function(tr){
+    var btn=tr.querySelector('.tm-agendar-btn[data-lead-id]');if(!btn)return;
+    tr.style.display=ids.has(String(btn.dataset.leadId))?'':'none';
+  });
+}
 function instalarBusca(){
   if(wrapped||typeof window.fuRenderFila!=='function')return false;
   originalRender=window.fuRenderFila;wrapped=true;
   window.fuRenderFila=function(){
-    var input=document.getElementById('fu-busca'),q=String(input&&input.value||'').trim(),qd=digits(q);
-    var phoneMode=qd.length>=4 && /^[\d\s()+.\-]+$/.test(q);
-    if(!phoneMode){var out=originalRender.apply(this,arguments);queueRefine();return out;}
-    input.value='';
-    var out2=originalRender.apply(this,arguments);
-    input.value=q;
-    var tb=document.getElementById('fu-tbody');
-    if(tb)tb.querySelectorAll('tr').forEach(function(tr){var ok=telefoneDaLinha(tr).indexOf(qd)>=0;tr.style.display=ok?'':'none';});
-    queueRefine();return out2;
+    var input=document.getElementById('fu-busca'),raw=String(input&&input.value||'');
+    if(input)input.value='';
+    var out=originalRender.apply(this,arguments);
+    if(input)input.value=raw;
+    aplicarBuscaCarteira(raw);
+    refinarLinhas();syncAtualizar();syncContador();
+    return out;
   };
   return true;
 }
 function instalarRefreshUi(){
   if(refreshUiWrapped||typeof window.TM_FOLLOWUP_REFRESH_UI!=='function')return false;
   var old=window.TM_FOLLOWUP_REFRESH_UI;refreshUiWrapped=true;
-  window.TM_FOLLOWUP_REFRESH_UI=function(){var r=old.apply(this,arguments);queueRefine();return r;};
+  window.TM_FOLLOWUP_REFRESH_UI=function(){var r=old.apply(this,arguments);refinarLinhas();syncAtualizar();syncContador();return r;};
   return true;
 }
 function motivos(){return '<option value="">Selecione o motivo...</option><option>Cliente Cancelou</option><option>Cliente Sumiu</option><option>Remarcamos</option><option>Realizado S/ Follow Up</option>';}
@@ -103,7 +97,8 @@ function abrirCancelar(c){
   d.querySelector('[data-close]').onclick=function(){d.remove();};
   d.querySelector('[data-confirm]').onclick=function(){var r=d.querySelector('#tm-direct-cancel-reason').value;if(!r){toast('Selecione o motivo.');return;}var b=d.querySelector('[data-confirm]');b.disabled=true;rpc('request_followup_commitment_cancel',{p_commitment_id:c.commitment_id,p_reason:r}).then(function(){d.remove();toast('Agendamento cancelado. O Admin será notificado.');return window.CRM_FOLLOWUP&&typeof window.CRM_FOLLOWUP.carregar==='function'?window.CRM_FOLLOWUP.carregar():null;}).then(function(){return atualizarCommitments();}).catch(function(e){b.disabled=false;toast(String(e&&e.message||e));});};
 }
-function css(){if(document.getElementById('tm-followup-refine-style'))return;var s=document.createElement('style');s.id='tm-followup-refine-style';s.textContent='body:has(#page-followup.active) #refresh-btn{display:none!important}.tm-fu-chip.tm-fu-missed{background:rgba(239,68,68,.14)!important;color:#f87171!important;min-width:34px;text-align:center;justify-content:center}.tm-agendar-btn[data-tm-commit-cancel="1"]{min-width:72px!important;width:72px!important;padding:0 8px!important}.tm-action-cell{gap:6px!important}';document.head.appendChild(s);}
+function queueRefine(){clearTimeout(refineTimer);refineTimer=setTimeout(function(){refinarLinhas();syncAtualizar();syncContador();},80);}
+function css(){if(document.getElementById('tm-followup-refine-style'))return;var s=document.createElement('style');s.id='tm-followup-refine-style';s.textContent='body:has(#page-followup.active) #refresh-btn{display:none!important}.tm-agendar-btn[data-tm-commit-cancel="1"]{min-width:72px!important;width:72px!important;padding:0 8px!important}.tm-action-cell{gap:6px!important}';document.head.appendChild(s);}
 function boot(){
   css();instalarCadencia();syncAtualizar();instalarBusca();instalarRefreshUi();atualizarCommitments();queueRefine();
   var p=document.getElementById('page-followup');if(p){pageObserver=new MutationObserver(function(){syncAtualizar();if(filaAtiva())queueRefine();});pageObserver.observe(p,{attributes:true,attributeFilter:['class']});}
