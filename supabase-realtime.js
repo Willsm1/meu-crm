@@ -68,9 +68,9 @@ function loadUiEnhancements(){
   add('script[data-tm-period-filters]','ui-period-filters.js?v=20260920-0242','tmPeriodFilters');
   add('script[data-tm-sales-date]','sales-date.js?v=20260920-0255','tmSalesDate');
   add('script[data-tm-followup-commitments]','followup-commitment-ui.js?v=20260923-2325','tmFollowupCommitments');
-  add('script[data-tm-followup-schedule]','followup-schedule-ui.js?v=20260920-1455','tmFollowupSchedule');
+  add('script[data-tm-followup-schedule]','followup-schedule-ui.js?v=20260924-0012','tmFollowupSchedule');
   add('script[data-tm-followup-agendar]','followup-agendar-ui.js?v=20260920-1455','tmFollowupAgendar');
-  add('script[data-tm-followup-refinements]','followup-ux-refinements.js?v=20260923-2350','tmFollowupRefinements');
+  add('script[data-tm-followup-refinements]','followup-ux-refinements.js?v=20260924-0012','tmFollowupRefinements');
   add('script[data-tm-gesture-guard]','gesture-navigation-guard.js?v=20260920-1148','tmGestureGuard');
   add('script[data-tm-ui-labels]','ui-labels.js?v=20260920-1038','tmUiLabels');
   add('script[data-tm-notifications]','notifications-ui.js?v=20260920-1134','tmNotifications');
