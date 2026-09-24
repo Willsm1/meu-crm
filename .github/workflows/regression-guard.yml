@@ -30,3 +30,15 @@ jobs:
         run: python tools/performance_guard.py
       - name: Performance runtime smoke
         run: node tools/performance_runtime_test.js
+      - name: Follow-up browser smoke
+        run: |
+          python3 -m http.server 8765 >/tmp/tm-http.log 2>&1 &
+          SERVER=$!
+          trap 'kill $SERVER || true' EXIT
+          CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME" ]; then
+            echo "Chrome/Chromium not available on runner"
+            exit 1
+          fi
+          OUT="$($CHROME --headless --no-sandbox --disable-gpu --virtual-time-budget=3000 --dump-dom http://127.0.0.1:8765/tools/performance_browser_harness.html)"
+          echo "$OUT" | grep 'data-result="PASS"'
