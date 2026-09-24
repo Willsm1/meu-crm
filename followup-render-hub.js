@@ -3,13 +3,12 @@
 'use strict';
 if(window.__TM_FOLLOWUP_RENDER_HUB__)return;
 window.__TM_FOLLOWUP_RENDER_HUB__=true;
-var wrapped=false,frame=null,retries=0;
+var wrapped=false,retries=0,emitting=false;
 function emit(){
-  if(frame)cancelAnimationFrame(frame);
-  frame=requestAnimationFrame(function(){
-    frame=null;
-    try{document.dispatchEvent(new CustomEvent('tm:followup-rendered'));}catch(e){}
-  });
+  if(emitting)return;
+  emitting=true;
+  try{document.dispatchEvent(new CustomEvent('tm:followup-rendered'));}catch(e){}
+  finally{emitting=false;}
 }
 function install(){
   if(wrapped)return true;
