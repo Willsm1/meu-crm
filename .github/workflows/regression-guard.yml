@@ -28,3 +28,5 @@ jobs:
         run: python tools/regression_guard.py
       - name: Performance invariants
         run: python tools/performance_guard.py
+      - name: Performance runtime smoke
+        run: node tools/performance_runtime_test.js
