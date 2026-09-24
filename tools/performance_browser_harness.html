@@ -57,6 +57,7 @@
 (function(){
   function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
   function visibleRows(){return Array.from(document.querySelectorAll('#fu-tbody tr')).filter(function(r){return r.style.display!=='none';});}
+  function rowIds(rows){return rows.map(function(r){var b=r.querySelector('.tm-agendar-btn');return b?b.dataset.leadId:'?';}).join(',');}
   async function run(){
     await sleep(500);
     var cadence=document.querySelector('[data-tm-fu-sort="cadencia"]');
@@ -74,7 +75,10 @@
     var q=document.getElementById('fu-busca');q.value='9622';q.dispatchEvent(new Event('input',{bubbles:true}));
     await sleep(80);
     rows=visibleRows();
-    if(rows.length!==1||rows[0].querySelector('.tm-agendar-btn').dataset.leadId!=='1')throw new Error('phone search failed');
+    if(rows.length!==1||rows[0].querySelector('.tm-agendar-btn').dataset.leadId!=='1'){
+      var all=Array.from(document.querySelectorAll('#fu-tbody tr')).map(function(r){var b=r.querySelector('.tm-agendar-btn');return (b?b.dataset.leadId:'?')+':display='+(r.style.display||'')+':eligible='+(r.dataset.tmFuEligible||'')+':key='+(r.dataset.tmSearchKey||'');}).join(' || ');
+      throw new Error('phone search failed; visible='+rowIds(rows)+'; all='+all+'; input='+q.value);
+    }
     q.value='';q.dispatchEvent(new Event('input',{bubbles:true}));
     await sleep(80);
     if(visibleRows().length!==2)throw new Error('search clear did not restore only eligible rows');
