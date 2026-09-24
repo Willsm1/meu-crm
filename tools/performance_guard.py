@@ -25,7 +25,8 @@ hub = read("followup-render-hub.js")
 
 # Reloads: one coordinated path, no second CRM_UPDATED reload in scope/canonical.
 require("reloadInFlight" in scope and "reloadPending" in scope, "scope reload coalescing missing")
-require("CRM_UPDATED" not in scope, "scope-admin reintroduced a CRM_UPDATED reload listener")
+require("addEventListener('message'" not in scope and 'addEventListener("message"' not in scope,
+        "scope-admin reintroduced a global message reload listener")
 require("addEventListener('message'" not in canonical and 'addEventListener("message"' not in canonical,
         "supabase-canonical reintroduced a second global message reload listener")
 require("CRM_UPDATED" in realtime and "reloadSoon(true)" in realtime, "central CRM_UPDATED coordinator missing")
