@@ -7,11 +7,13 @@
 if(window.__TM_DAILY_KANBAN_ORIGINS__)return;
 window.__TM_DAILY_KANBAN_ORIGINS__=true;
 var EXTRA_ORIGINS=['Campanha Gerentes','Midrah','Campanha pessoal'];
-var renderWrapped=false,timer=null;
+var renderWrapped=false;
 function esc(v){return String(v==null?'':v);}
+
+/* Origens ficam independentes do Kanban. Os dois selects ja existem no HTML. */
 function addOriginOptions(){
-  document.querySelectorAll('select').forEach(function(sel){
-    var id=String(sel.id||'').toLowerCase();if(id!=='f-origem'&&id!=='filterorigem'&&id.indexOf('origem')<0)return;
+  ['filterOrigem','f-origem'].forEach(function(id){
+    var sel=document.getElementById(id);if(!sel)return;
     var existing=new Set(Array.prototype.map.call(sel.options,function(o){return String(o.value||o.textContent||'').trim().toLowerCase();}));
     var outros=Array.prototype.find.call(sel.options,function(o){return String(o.value||o.textContent||'').trim().toLowerCase()==='outros';});
     EXTRA_ORIGINS.forEach(function(name){
@@ -22,12 +24,18 @@ function addOriginOptions(){
     });
   });
 }
-function leadByCard(card){
-  var oc=String(card.getAttribute('onclick')||'');var m=oc.match(/openModal\(['\"]([^'\"]+)['\"]\)/);var id=m&&m[1];
-  var rows=Array.isArray(window.leads)?window.leads:[];
-  if(id)return rows.find(function(l){return l&&String(l.id)===String(id);})||null;
-  var name=(card.querySelector('.k-name')||{}).textContent||'';
-  var matches=rows.filter(function(l){return l&&String(l.nome||'')===String(name||'');});return matches.length===1?matches[0]:null;
+
+/* Indice interno id -> lead. O ID nunca e exibido na interface. */
+function leadMap(rows){
+  var m=new Map();
+  (rows||[]).forEach(function(l){if(l&&l.id!==null&&l.id!==undefined)m.set(String(l.id),l);});
+  return m;
+}
+function leadByCard(card,byId){
+  var oc=String(card.getAttribute('onclick')||'');
+  var m=oc.match(/openModal\(['\"]([^'\"]+)['\"]\)/);
+  var id=m&&m[1];
+  return id?byId.get(String(id))||null:null;
 }
 function valorNumero(v){
   if(v===null||v===undefined||v==='')return 0;
@@ -53,32 +61,44 @@ function decorateKanban(){
   var root=document.getElementById('kanban');if(!root)return;
   ensureCss();
   var rows=Array.isArray(window.leads)?window.leads:[];
+  var byId=leadMap(rows);
+
   root.querySelectorAll('.k-card').forEach(function(card){
-    var l=leadByCard(card);if(!l)return;
+    var l=leadByCard(card,byId);if(!l)return;
     var sub=card.querySelector('.k-company');if(!sub)return;
     var team=String(l.empresa||l._team_name||'—').trim()||'—';
     var resp=String(l.responsavel||'').trim();
     var txt=team+(resp?' · '+resp:'');
-    sub.textContent=txt;sub.title=txt;
+    if(String(sub.textContent||'')!==txt)sub.textContent=txt;
+    if(String(sub.title||'')!==txt)sub.title=txt;
   });
+
+  /* Mantem o calculo de VGV exatamente por coluna, como aprovado. */
   root.querySelectorAll('.k-col').forEach(function(col){
     var title=col.querySelector('.k-title'),header=col.querySelector('.k-header');if(!title||!header)return;
     var status=String(title.textContent||'').trim();
     var total=rows.reduce(function(sum,l){return sum+(l&&String(l.status||'')===status?valorNumero(l.valor):0);},0);
+    var formatted=fmtVgv(total);
     var box=col.querySelector('.tm-k-vgv');
     if(!box){box=document.createElement('div');box.className='tm-k-vgv';header.insertAdjacentElement('afterend',box);}
-    box.innerHTML='<span>VGV</span>'+esc(fmtVgv(total));
-    box.title='VGV total de '+status+': '+fmtVgv(total);
+    if(box.dataset.tmVgv!==formatted){box.innerHTML='<span>VGV</span>'+esc(formatted);box.dataset.tmVgv=formatted;}
+    var titleText='VGV total de '+status+': '+formatted;
+    if(String(box.title||'')!==titleText)box.title=titleText;
   });
 }
-function decorate(){addOriginOptions();decorateKanban();}
 function wrap(){
-  if(renderWrapped||typeof window.renderKanban!=='function')return;
+  if(renderWrapped||typeof window.renderKanban!=='function')return false;
   var original=window.renderKanban;
   window.renderKanban=function(){var r=original.apply(this,arguments);setTimeout(decorateKanban,0);return r;};
   renderWrapped=true;
+  return true;
 }
-function schedule(){clearTimeout(timer);timer=setTimeout(function(){wrap();decorate();},60);}
-function boot(){wrap();decorate();new MutationObserver(schedule).observe(document.body,{childList:true,subtree:true});}
+function boot(){
+  addOriginOptions();
+  wrap();
+  /* Se o Kanban ja tiver sido renderizado antes deste modulo carregar, decora uma unica vez. */
+  var root=document.getElementById('kanban');if(root&&root.children.length)decorateKanban();
+  if(!renderWrapped){var tries=0,t=setInterval(function(){tries++;if(wrap()||tries>40)clearInterval(t);},100);}
+}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
