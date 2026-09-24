@@ -36,7 +36,8 @@ function applyNow(){
   var rows=tb.querySelectorAll('tr');
   for(var i=0;i<rows.length;i++){
     var tr=rows[i],id=leadId(tr);if(!id)continue;
-    var ok=!term||rowKey(tr,map).indexOf(term)>=0;
+    var eligible=tr.dataset.tmFuEligible!=='0';
+    var ok=eligible&&(!term||rowKey(tr,map).indexOf(term)>=0);
     var d=ok?'':'none';if(tr.style.display!==d)tr.style.display=d;
     if(ok)n++;
   }
