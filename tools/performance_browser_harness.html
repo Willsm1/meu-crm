@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Follow-up performance smoke</title></head>
+<body>
+<button id="refresh-btn">Atualizar</button>
+<div id="kanban"></div>
+<div id="page-followup" class="page active">
+  <div class="container">
+    <div>
+      <select id="fu-resp"><option value="">Todos</option></select>
+      <select id="fu-prio"><option value="">Todas</option></select>
+      <input id="fu-busca" value="">
+    </div>
+    <div id="fu-estado">0 lead(s) na fila</div>
+    <div><table><thead><tr>
+      <th>Lead</th><th>Responsável</th><th>Status</th><th>Eu falei</th><th>Ele falou</th><th>Cadência 7D</th><th>Parado</th><th>Próximo</th><th>Prioridade</th><th>Ação</th>
+    </tr></thead><tbody id="fu-tbody"></tbody></table></div>
+  </div>
+</div>
+<div id="result" data-result="RUNNING">RUNNING</div>
+<script>
+(function(){
+  var pad=function(n){return String(n).padStart(2,'0')};
+  var now=new Date(),today=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());
+  var tomorrow=new Date(now.getTime()+86400000),tom=tomorrow.getFullYear()+'-'+pad(tomorrow.getMonth()+1)+'-'+pad(tomorrow.getDate());
+  window._testLines=[
+    {lead_id:'1',nome:'Sandro',telefone:'5511962216901',responsavel:'Beatriz',status:'Interações',cadencia_7d:[{data:today,falou:false},{data:tom,falou:false}],dias_parado:2,prioridade:'em_dia',proximo_contato:tom,proximo_contato_em:new Date(Date.now()+3600000).toISOString()},
+    {lead_id:'3',nome:'Ana',telefone:'5511988887777',responsavel:'Beatriz',status:'Em negociação',cadencia_7d:[{data:today,falou:true}],dias_parado:0,prioridade:'em_dia',proximo_contato:'',proximo_contato_em:''},
+    {lead_id:'2',nome:'Novo Excluído',telefone:'5511999999999',responsavel:'Beatriz',status:'Novo',cadencia_7d:[{data:today,falou:false}],dias_parado:5,prioridade:'sem_contato',proximo_contato:'',proximo_contato_em:''}
+  ];
+  window.CRM_FOLLOWUP={linhas:function(){return window._testLines.slice();},carregar:function(){window.fuRenderFila();return Promise.resolve(window._testLines);}};
+  window.CRM_CANONICAL={rpc:function(name,args){
+    if(name==='current_profile_context')return Promise.resolve([{role:'executivo',id:'u1'}]);
+    if(name==='followup_commitment_state')return Promise.resolve([{lead_id:'1',commitment_id:'c1',nome:'Sandro',scheduled_at:new Date(Date.now()+3600000).toISOString(),status:'scheduled',is_overdue:false}]);
+    if(name==='followup_commitment_admin_pending')return Promise.resolve([]);
+    if(name==='followup_commitment_history')return Promise.resolve([]);
+    if(name==='search_followup_commitment_history')return Promise.resolve([]);
+    return Promise.resolve([]);
+  }};
+  window.showToast=function(){};
+  window.fuRenderFila=function(){
+    var tb=document.getElementById('fu-tbody');
+    tb.innerHTML=window._testLines.map(function(x){return '<tr><td>'+x.nome+'<br>'+x.telefone+'</td><td>'+x.responsavel+'</td><td>'+x.status+'</td><td>—</td><td>—</td><td></td><td>'+x.dias_parado+'d</td><td>'+x.proximo_contato+'</td><td>'+x.prioridade+'</td><td><button class="tm-agendar-btn" data-lead-id="'+x.lead_id+'">'+(x.proximo_contato?'Reagendar':'Agendar')+'</button></td></tr>';}).join('');
+    document.getElementById('fu-estado').textContent=window._testLines.length+' lead(s) na fila';
+  };
+  window.fuRenderFila();
+})();
+</script>
+<script src="../followup-render-hub.js"></script>
+<script src="../followup-commitment-ui.js"></script>
+<script src="../followup-schedule-ui.js"></script>
+<script src="../followup-ux-refinements.js"></script>
+<script src="../followup-search-fastfix.js"></script>
+<script src="../kanban-scroll-fix.js"></script>
+<script src="../followup-completed-queue-fix.js"></script>
+<script>
+(function(){
+  function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+  function visibleRows(){return Array.from(document.querySelectorAll('#fu-tbody tr')).filter(function(r){return r.style.display!=='none';});}
+  async function run(){
+    await sleep(500);
+    var cadence=document.querySelector('[data-tm-fu-sort="cadencia"]');
+    if(!cadence)throw new Error('cadence sort missing');
+    cadence.click();
+    await sleep(120);
+    var rows=visibleRows();
+    if(rows.length!==2)throw new Error('eligibility expected 2 rows, got '+rows.length);
+    var first=rows[0].querySelector('.tm-agendar-btn');
+    if(!first||first.dataset.leadId!=='1')throw new Error('cadence descending did not place lead 1 first');
+    var excluded=Array.from(document.querySelectorAll('#fu-tbody tr')).find(function(r){var b=r.querySelector('.tm-agendar-btn');return b&&b.dataset.leadId==='2';});
+    if(!excluded||excluded.dataset.tmFuEligible!=='0'||excluded.style.display!=='none')throw new Error('ineligible lead became visible');
+    var hist=document.querySelector('.tm-task-state[data-tm-history-lead="1"]');
+    if(!hist)throw new Error('commitment history decoration missing');
+    var q=document.getElementById('fu-busca');q.value='9622';q.dispatchEvent(new Event('input',{bubbles:true}));
+    await sleep(80);
+    rows=visibleRows();
+    if(rows.length!==1||rows[0].querySelector('.tm-agendar-btn').dataset.leadId!=='1')throw new Error('phone search failed');
+    q.value='';q.dispatchEvent(new Event('input',{bubbles:true}));
+    await sleep(80);
+    if(visibleRows().length!==2)throw new Error('search clear did not restore only eligible rows');
+    if(excluded.style.display!=='none')throw new Error('search clear re-showed ineligible lead');
+    document.getElementById('result').dataset.result='PASS';document.getElementById('result').textContent='PASS';
+  }
+  run().catch(function(e){var r=document.getElementById('result');r.dataset.result='FAIL';r.textContent='FAIL: '+e.message;console.error(e);});
+})();
+</script>
+</body></html>
