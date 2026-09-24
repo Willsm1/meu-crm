@@ -1,7 +1,7 @@
 /* Taurus Magnum CRM — realtime sync layer */
 (function(){
 'use strict';
-var ch=null,timer=null,lastReload=0,lastSuccessfulReload=0,authBound=false;
+var ch=null,timer=null,lastReload=0,lastSuccessfulReload=0,authBound=false,realtimeStatus='',hadSubscribed=false;
 var perfInstalled=false,renderWrapped=false;
 var perfInflight=new Map(),perfCache=new Map(),leadMeta=new Map(),leadMetaComplete=false;
 var perfStats={network:0,coalesced:0,cached:0,syntheticMeta:0,fullReloadRequests:0};
@@ -123,7 +123,9 @@ function installPerformanceCoordinator(){
     var nextInput=input,nextUrl=url;
     if(isCoreLeadRead(u,method)){
       nextUrl=augmentLeadRead(url);
-      nextInput=(typeof input==='string')?nextUrl:nextUrl;
+      if(typeof input==='string')nextInput=nextUrl;
+      else if(typeof Request!=='undefined'&&input instanceof Request)nextInput=new Request(nextUrl,input);
+      else nextInput=nextUrl;
     }
     var auth=authKey(input,init),body=requestBody(init);
     if(isCommitState(u,method)){
@@ -138,16 +140,16 @@ function installPerformanceCoordinator(){
       var gk='get|'+auth+'|'+nextUrl+'|'+(requestHeaders(input,init).get('Range')||'');
       return cacheFetch(gk,0,function(){
         return originalFetch(nextInput,init).then(function(r){
-          if(isCoreLeadRead(parseUrl(url),method)&&r&&r.ok){
-            try{var cp=r.clone();cp.json().then(function(rows){captureLeadMeta(rows,input,init,nextUrl);}).catch(function(){});}catch(e){}
-          }
-          return r;
+          if(!isCoreLeadRead(parseUrl(url),method)||!r||!r.ok)return r;
+          try{
+            return r.clone().json().then(function(rows){captureLeadMeta(rows,input,init,nextUrl);return r;},function(){return r;});
+          }catch(e){return r;}
         });
       });
     }
     perfStats.network++;return originalFetch(nextInput,init);
   };
-  window.CRM_PERF={stats:function(){return Object.assign({},perfStats,{leadMeta:leadMeta.size,leadMetaComplete:leadMetaComplete});},clear:function(){perfInflight.clear();perfCache.clear();}};
+  window.CRM_PERF={stats:function(){return Object.assign({},perfStats,{leadMeta:leadMeta.size,leadMetaComplete:leadMetaComplete,realtimeStatus:realtimeStatus});},clear:function(){perfInflight.clear();perfCache.clear();}};
 }
 installPerformanceCoordinator();
 
@@ -200,11 +202,12 @@ function loadUiEnhancements(){
   add('script[data-tm-scope-privacy]','scope-privacy-ui.js?v=20260920-1124','tmScopePrivacy');
   add('script[data-tm-period-filters]','ui-period-filters.js?v=20260920-0242','tmPeriodFilters');
   add('script[data-tm-sales-date]','sales-date.js?v=20260920-0255','tmSalesDate');
-  add('script[data-tm-followup-commitments]','followup-commitment-ui.js?v=20260923-2325','tmFollowupCommitments');
+  add('script[data-tm-followup-render-hub]','followup-render-hub.js?v=20260924-0127','tmFollowupRenderHub');
+  add('script[data-tm-followup-commitments]','followup-commitment-ui.js?v=20260924-0127','tmFollowupCommitments');
   add('script[data-tm-followup-schedule]','followup-schedule-ui.js?v=20260924-0012','tmFollowupSchedule');
   add('script[data-tm-followup-agendar]','followup-agendar-ui.js?v=20260920-1455','tmFollowupAgendar');
-  add('script[data-tm-followup-refinements]','followup-ux-refinements.js?v=20260924-0012','tmFollowupRefinements');
-  add('script[data-tm-followup-search-fastfix]','followup-search-fastfix.js?v=20260924-0021','tmFollowupSearchFastfix');
+  add('script[data-tm-followup-refinements]','followup-ux-refinements.js?v=20260924-0127','tmFollowupRefinements');
+  add('script[data-tm-followup-search-fastfix]','followup-search-fastfix.js?v=20260924-0127','tmFollowupSearchFastfix');
   add('script[data-tm-gesture-guard]','gesture-navigation-guard.js?v=20260920-1148','tmGestureGuard');
   add('script[data-tm-ui-labels]','ui-labels.js?v=20260920-1038','tmUiLabels');
   add('script[data-tm-notifications]','notifications-ui.js?v=20260920-1134','tmNotifications');
@@ -244,6 +247,7 @@ function bindAuthRefresh(){
   cli.auth.onAuthStateChange(function(){
     perfCache.clear();perfInflight.clear();leadMeta.clear();leadMetaComplete=false;
     try{if(ch){cli.removeChannel(ch);ch=null;}}catch(e){}
+    realtimeStatus='';hadSubscribed=false;
     reloadSoon(true);
     setTimeout(start,120);
   });
@@ -259,11 +263,18 @@ function start(){
   ch=cli.channel('tm-crm-sync')
     .on('postgres_changes',{event:'*',schema:'crm',table:'leads'},function(){reloadSoon(false);})
     .on('postgres_changes',{event:'*',schema:'crm',table:'lead_assignments'},function(){reloadSoon(true);})
-    .subscribe(function(status){try{console.info('[CRM REALTIME]',status);}catch(_){} });
+    .subscribe(function(status){
+      var prev=realtimeStatus;realtimeStatus=String(status||'');
+      if(realtimeStatus==='SUBSCRIBED'){
+        if(hadSubscribed&&prev&&prev!=='SUBSCRIBED')reloadSoon(true);
+        hadSubscribed=true;
+      }
+      try{console.info('[CRM REALTIME]',status);}catch(_){}
+    });
 }
 function fallback(){
   if(document.visibilityState!=='visible')return;
-  if(Date.now()-lastSuccessfulReload>1200)reloadSoon(true);
+  if(hadSubscribed&&realtimeStatus!=='SUBSCRIBED')reloadSoon(true);
 }
 window.addEventListener('message',function(ev){if(ev.source===window&&ev.data&&ev.data.type==='CRM_UPDATED')reloadSoon(true);});
 window.addEventListener('focus',fallback);document.addEventListener('visibilitychange',fallback);
