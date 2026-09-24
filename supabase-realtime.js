@@ -2,6 +2,37 @@
 (function(){
 'use strict';
 var ch=null,timer=null,lastReload=0,lastSuccessfulReload=0,authBound=false;
+
+/* HOTFIX: Marco Zero legado desativado definitivamente no runtime.
+   O callback antigo pode ter sido agendado antes deste arquivo carregar,
+   então neutralizamos também todas as dependências chamadas por ele. */
+function disableLegacyBaseline(){
+  function clearBaselineUi(){
+    try{ var ov=document.getElementById('bl-overlay'); if(ov) ov.remove(); }catch(e){}
+    try{ localStorage.removeItem('crm_baseline_lock'); }catch(e){}
+  }
+  try{ window.verificarBaseline=function(){ clearBaselineUi(); return null; }; }catch(e){}
+  try{ window.blMostrarPainel=function(){ clearBaselineUi(); return null; }; }catch(e){}
+  try{ window.blConfirmar=function(){ clearBaselineUi(); return false; }; }catch(e){}
+  try{ window.blEnviarAoSheets=function(){ return Promise.resolve({ok:false,motivo:'Marco Zero desativado'}); }; }catch(e){}
+  try{ window.blConsultarSheets=function(){ return Promise.resolve({existe:true,total:0,desativado:true}); }; }catch(e){}
+  try{ window.blBaixarDoSheets=function(){ clearBaselineUi(); return null; }; }catch(e){}
+  try{
+    document.addEventListener('click',function(ev){
+      var t=ev.target&&ev.target.closest&&ev.target.closest('#bl-confirmar');
+      if(!t)return;
+      ev.preventDefault();ev.stopPropagation();ev.stopImmediatePropagation();clearBaselineUi();
+    },true);
+  }catch(e){}
+  try{
+    if(typeof MutationObserver!=='undefined'){
+      new MutationObserver(function(){ clearBaselineUi(); }).observe(document.documentElement||document,{childList:true,subtree:true});
+    }
+  }catch(e){}
+  clearBaselineUi();
+}
+disableLegacyBaseline();
+
 function installFollowup401Retry(){
   if(window.__TM_FOLLOWUP_401_RETRY__)return;
   window.__TM_FOLLOWUP_401_RETRY__=true;
