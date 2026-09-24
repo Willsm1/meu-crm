@@ -2,6 +2,37 @@
 (function(){
 'use strict';
 var ch=null,timer=null,lastReload=0,lastSuccessfulReload=0,authBound=false;
+
+/* Marco Zero legado desativado no runtime.
+   O callback antigo pode ter sido agendado antes deste arquivo carregar,
+   então neutralizamos também todas as dependências chamadas por ele. */
+function disableLegacyBaseline(){
+  function clearBaselineUi(){
+    try{ var ov=document.getElementById('bl-overlay'); if(ov) ov.remove(); }catch(e){}
+    try{ localStorage.removeItem('crm_baseline_lock'); }catch(e){}
+  }
+  try{ window.verificarBaseline=function(){ clearBaselineUi(); return null; }; }catch(e){}
+  try{ window.blMostrarPainel=function(){ clearBaselineUi(); return null; }; }catch(e){}
+  try{ window.blConfirmar=function(){ clearBaselineUi(); return false; }; }catch(e){}
+  try{ window.blEnviarAoSheets=function(){ return Promise.resolve({ok:false,motivo:'Marco Zero desativado'}); }; }catch(e){}
+  try{ window.blConsultarSheets=function(){ return Promise.resolve({existe:true,total:0,desativado:true}); }; }catch(e){}
+  try{ window.blBaixarDoSheets=function(){ clearBaselineUi(); return null; }; }catch(e){}
+  try{
+    document.addEventListener('click',function(ev){
+      var t=ev.target&&ev.target.closest&&ev.target.closest('#bl-confirmar');
+      if(!t)return;
+      ev.preventDefault();ev.stopPropagation();ev.stopImmediatePropagation();clearBaselineUi();
+    },true);
+  }catch(e){}
+  try{
+    if(typeof MutationObserver!=='undefined'){
+      new MutationObserver(function(){ clearBaselineUi(); }).observe(document.documentElement||document,{childList:true,subtree:true});
+    }
+  }catch(e){}
+  clearBaselineUi();
+}
+disableLegacyBaseline();
+
 function installFollowup401Retry(){
   if(window.__TM_FOLLOWUP_401_RETRY__)return;
   window.__TM_FOLLOWUP_401_RETRY__=true;
@@ -36,17 +67,25 @@ function loadUiEnhancements(){
   add('script[data-tm-scope-privacy]','scope-privacy-ui.js?v=20260920-1124','tmScopePrivacy');
   add('script[data-tm-period-filters]','ui-period-filters.js?v=20260920-0242','tmPeriodFilters');
   add('script[data-tm-sales-date]','sales-date.js?v=20260920-0255','tmSalesDate');
+  add('script[data-tm-followup-commitments]','followup-commitment-ui.js?v=20260923-2325','tmFollowupCommitments');
   add('script[data-tm-followup-schedule]','followup-schedule-ui.js?v=20260920-1455','tmFollowupSchedule');
   add('script[data-tm-followup-agendar]','followup-agendar-ui.js?v=20260920-1455','tmFollowupAgendar');
+  add('script[data-tm-followup-refinements]','followup-ux-refinements.js?v=20260923-2350','tmFollowupRefinements');
   add('script[data-tm-gesture-guard]','gesture-navigation-guard.js?v=20260920-1148','tmGestureGuard');
   add('script[data-tm-ui-labels]','ui-labels.js?v=20260920-1038','tmUiLabels');
   add('script[data-tm-notifications]','notifications-ui.js?v=20260920-1134','tmNotifications');
   add('script[data-tm-duplicates]','duplicates-ui.js?v=20260920-1739','tmDuplicates');
+  add('script[data-tm-dup-phone-br-test]','duplicate-phone-br-test.js?v=20260923-1248','tmDupPhoneBrTest');
   add('script[data-tm-kanban-scroll]','kanban-scroll-fix.js?v=20260920-2038','tmKanbanScroll');
   add('script[data-tm-followup-completed-queue]','followup-completed-queue-fix.js?v=20260920-2326','tmFollowupCompletedQueue');
   add('script[data-tm-estagio-ui]','stage-ui.js?v=20260922-1540','tmEstagioUi');
   add('script[data-tm-brand-accent]','ui-brand-accent.js?v=20260922-1540','tmBrandAccent');
   add('script[data-tm-modern-glow]','ui-modern-glow.js?v=20260922-1540','tmModernGlow');
+  add('script[data-tm-contact-copy-all]','contact-copy-all-ui.js?v=20260923-1310','tmContactCopyAll');
+  add('script[data-tm-edit-identity-guard]','edit-identity-guard.js?v=20260923-1234','tmEditIdentityGuard');
+  add('script[data-tm-daily-kanban-origins]','daily-kanban-origins-ui.js?v=20260923-2350','tmDailyKanbanOrigins');
+  add('script[data-tm-regions-ui]','regions-ui.js?v=20260923-1234','tmRegionsUi');
+  add('script[data-tm-actionbar-context]','actionbar-context-ui.js?v=20260923-2357','tmActionbarContext');
 }
 function followupAtivo(){var p=document.getElementById('page-followup');return !!(p&&p.classList.contains('active'));}
 function reloadSoon(forceFull){
