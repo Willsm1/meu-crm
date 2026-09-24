@@ -25,9 +25,9 @@
   var now=new Date(),today=key(now),yesterday=key(new Date(now.getTime()-86400000));
   var tomorrow=new Date(now.getTime()+86400000),tom=key(tomorrow);
   window._testLines=[
-    {lead_id:'1',nome:'Sandro',telefone:'5511962216901',responsavel:'Beatriz',status:'Interações',ult_meu:today+'T09:00:00',cadencia_7d:[{data:today,falou:false},{data:tom,falou:false}],dias_parado:2,prioridade:'em_dia',proximo_contato:tom,proximo_contato_em:new Date(Date.now()+3600000).toISOString()},
-    {lead_id:'3',nome:'Ana',telefone:'5511988887777',responsavel:'Beatriz',status:'Em negociação',ult_meu:yesterday+'T09:00:00',cadencia_7d:[{data:today,falou:true}],dias_parado:0,prioridade:'em_dia',proximo_contato:'',proximo_contato_em:''},
-    {lead_id:'2',nome:'Novo Excluído',telefone:'5511999999999',responsavel:'Beatriz',status:'Novo',ult_meu:yesterday+'T09:00:00',cadencia_7d:[{data:today,falou:false}],dias_parado:5,prioridade:'sem_contato',proximo_contato:'',proximo_contato_em:''}
+    {lead_id:'1',nome:'Sandro',telefone:'5511962216901',responsavel:'Beatriz',status:'Interações',ultimo_contato:today+'T09:00:00',ult_meu:yesterday+'T09:00:00',cadencia_7d:[{data:today,falou:false},{data:tom,falou:false}],dias_parado:0,prioridade:'em_dia',proximo_contato:tom,proximo_contato_em:new Date(Date.now()+3600000).toISOString()},
+    {lead_id:'3',nome:'Ana',telefone:'5511988887777',responsavel:'Beatriz',status:'Em negociação',ultimo_contato:yesterday+'T09:00:00',ult_meu:today+'T09:00:00',cadencia_7d:[{data:today,falou:true}],dias_parado:1,prioridade:'em_dia',proximo_contato:'',proximo_contato_em:''},
+    {lead_id:'2',nome:'Novo Excluído',telefone:'5511999999999',responsavel:'Beatriz',status:'Novo',ultimo_contato:yesterday+'T09:00:00',ult_meu:yesterday+'T09:00:00',cadencia_7d:[{data:today,falou:false}],dias_parado:5,prioridade:'sem_contato',proximo_contato:'',proximo_contato_em:''}
   ];
   window.CRM_FOLLOWUP={linhas:function(){return window._testLines.slice();},carregar:function(){window.fuRenderFila();return Promise.resolve(window._testLines);}};
   window.CRM_CANONICAL={rpc:function(name,args){
@@ -41,7 +41,7 @@
   window.showToast=function(){};
   window.fuRenderFila=function(){
     var tb=document.getElementById('fu-tbody');
-    tb.innerHTML=window._testLines.map(function(x){return '<tr><td>'+x.nome+'<br>'+x.telefone+'</td><td>'+x.responsavel+'</td><td>'+x.status+'</td><td>'+String(x.ult_meu||'').slice(0,10)+'</td><td>—</td><td></td><td>'+x.dias_parado+'d</td><td>'+x.proximo_contato+'</td><td>'+x.prioridade+'</td><td><input id="fu-d-'+x.lead_id+'" type="date"></td></tr>';}).join('');
+    tb.innerHTML=window._testLines.map(function(x){return '<tr><td>'+x.nome+'<br>'+x.telefone+'</td><td>'+x.responsavel+'</td><td>'+x.status+'</td><td>'+String(x.ultimo_contato||'').slice(0,10)+'</td><td>—</td><td></td><td>'+x.dias_parado+'d</td><td>'+x.proximo_contato+'</td><td>'+x.prioridade+'</td><td><input id="fu-d-'+x.lead_id+'" type="date"></td></tr>';}).join('');
     document.getElementById('fu-estado').textContent=window._testLines.length+' lead(s) na fila';
   };
   window.fuRenderFila();
@@ -66,8 +66,8 @@
     if(document.querySelector('#fu-tbody input[id^="fu-d-"]'))throw new Error('legacy date input survived render');
     var sandro=rowById('1'),ana=rowById('3');
     if(!sandro||!ana)throw new Error('schedule buttons were not restored');
-    if(String(sandro.cells[8].textContent||'').trim()!=='Em dia')throw new Error('today outbound should be Em dia');
-    if(String(ana.cells[8].textContent||'').trim()!=='—')throw new Error('cadence fallback incorrectly marked yesterday outbound as Em dia');
+    if(String(sandro.cells[8].textContent||'').trim()!=='Em dia')throw new Error('displayed today outbound should be Em dia');
+    if(String(ana.cells[8].textContent||'').trim()!=='—')throw new Error('old/alternate outbound field incorrectly marked yesterday displayed contact as Em dia');
     var anaBtn=ana.querySelector('.tm-agendar-btn');anaBtn.click();await sleep(30);
     if(!document.querySelector('.tm-date-pop'))throw new Error('approved calendar did not open from Agendar');
     document.body.dispatchEvent(new MouseEvent('click',{bubbles:true}));await sleep(20);
