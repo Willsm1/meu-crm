@@ -26,3 +26,5 @@ jobs:
           find . -maxdepth 1 -type f -name '*.js' -print0 | xargs -0 -n1 node --check
       - name: Production invariants
         run: python tools/regression_guard.py
+      - name: Performance invariants
+        run: python tools/performance_guard.py
