@@ -5,7 +5,7 @@ if(window.__TM_FOLLOWUP_COMPLETED_QUEUE_FIX__)return;
 window.__TM_FOLLOWUP_COMPLETED_QUEUE_FIX__=true;
 
 var ELIGIBLE={'Interações':1,'Em negociação':1,'Proposta enviada':1,'Gold ⭐':1};
-var obs=null,busy=false;
+var busy=false;
 
 function loadClosingDirect(){
   if(document.querySelector('script[data-tm-closing-direct]'))return;
@@ -32,7 +32,7 @@ function isCompleted(x){return !!(x&&(x.tarefa_concluida||x.prioridade==='conclu
 function apply(){
   if(busy)return;
   var tb=document.getElementById('fu-tbody');if(!tb)return;
-  busy=true;if(obs)obs.disconnect();
+  busy=true;
   try{
     var byId=mapById(),rows=Array.prototype.slice.call(tb.querySelectorAll('tr'));
     var completed=[];
@@ -56,19 +56,12 @@ function apply(){
         else tb.appendChild(row);
       });
     }
-  }finally{
-    busy=false;
-    if(obs&&tb.isConnected)obs.observe(tb,{childList:true,subtree:false});
-  }
+  }finally{busy=false;}
 }
 function boot(){
   loadClosingDirect();
-  var tb=document.getElementById('fu-tbody');
-  if(!tb){setTimeout(boot,150);return;}
-  if(obs)obs.disconnect();
-  obs=new MutationObserver(function(){if(!busy)queueMicrotask(apply);});
-  obs.observe(tb,{childList:true,subtree:false});
   apply();
+  document.addEventListener('tm:followup-rendered',apply);
   window.TM_FOLLOWUP_COMPLETED_QUEUE_FIX_REFRESH=apply;
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();

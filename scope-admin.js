@@ -8,6 +8,7 @@ var scopeInitialized=false;
 var scope={type:'mine',id:null};
 var rawReload=null,rawRefresh=null;
 var saveChain=Promise.resolve();
+var reloadInFlight=null,reloadPending=false;
 
 function cfg(){return window.CRM_SUPABASE&&window.CRM_SUPABASE.config;}
 function tok(){var c=cfg();if(!c)return null;try{var s=JSON.parse(localStorage.getItem('sb-'+c.projectRef+'-auth-token')||'null');return s&&(s.access_token||(s.currentSession&&s.currentSession.access_token));}catch(e){return null;}}
@@ -32,7 +33,16 @@ function ownerOf(l){return ctx.assignments.get(String(l._uuid||''))||null;}
 function allowed(l){var me=ctx.me,a=ownerOf(l);if(!me)return true;if(me.role==='executivo')return !!a&&String(a.user_id)===String(me.id);if(scope.type==='all')return me.role==='admin';if(scope.type==='my_team')return !!a&&String(a.team_id)===String(me.team_id||'')&&String(a.user_id)!==String(me.id);if(scope.type==='team')return !!a&&String(a.team_id)===String(scope.id);if(scope.type==='user')return !!a&&String(a.user_id)===String(scope.id);return !!a&&String(a.user_id)===String(me.id);}
 function applyScope(){var rows=allRows.filter(allowed);window.leads=rows;try{leads=rows;}catch(e){}snap(rows);try{if(typeof renderAll==='function')renderAll();}catch(e){}try{var rp=document.getElementById('page-relatorio');if(rp&&rp.classList.contains('active')&&typeof renderRelatorio==='function')renderRelatorio();}catch(e){}syncFollowup();updateScopeLabel(rows.length);return rows;}
 function annotate(rows){return(rows||[]).map(function(l){var a=ownerOf(l),tid=a&&a.team_id||null,uid=a&&a.user_id||null;l._owner_id=uid;l._team_id=tid;l._team_name=tid?(ctx.teams.get(String(tid))||''):'';l.responsavel=uid?(ctx.users.get(String(uid))||''):'';l.empresa=l._team_name||'';return l;});}
-function scopedReload(){return loadContext().then(function(){return loadAllLeads();}).then(function(rows){allRows=annotate(rows||[]);return applyScope();});}
+function scopedReload(){
+  if(reloadInFlight){reloadPending=true;return reloadInFlight;}
+  var active=loadContext().then(function(){return loadAllLeads();}).then(function(rows){allRows=annotate(rows||[]);return applyScope();});
+  reloadInFlight=active;
+  active.finally(function(){
+    if(reloadInFlight===active)reloadInFlight=null;
+    if(reloadPending){reloadPending=false;setTimeout(function(){scopedReload().catch(function(){});},0);}
+  });
+  return active;
+}
 function setScope(next){scope=next||{type:'mine',id:null};saveScope();renderScopeBar();return applyScope();}
 function allowFollowup(x){var me=ctx.me;if(!me)return true;if(me.role==='executivo')return String(x.responsavel_id||'')===String(me.id||'');if(scope.type==='all')return me.role==='admin';if(scope.type==='my_team')return String(x.responsavel_team_id||'')===String(me.team_id||'')&&String(x.responsavel_id||'')!==String(me.id||'');if(scope.type==='team')return String(x.responsavel_team_id||'')===String(scope.id||'');if(scope.type==='user')return String(x.responsavel_id||'')===String(scope.id||'');return String(x.responsavel_id||'')===String(me.id||'');}
 function syncFollowup(){try{if(window.fuRenderFila)window.fuRenderFila();}catch(e){}}
@@ -53,6 +63,6 @@ function renderAdmin(teams,users){var active=teams.filter(function(t){return t.i
 function createTeam(){var n=(document.getElementById('adm-team-name').value||'').trim();if(!n)return;rpc('admin_create_team',{p_name:n}).then(function(){document.getElementById('adm-team-name').value='';msg('Equipe criada.');return loadContext();}).then(loadAdmin).catch(function(e){msg(e.message,true);});}
 function inviteUser(){var c=cfg(),h=hdr(),body={action:'invite_user',full_name:(document.getElementById('adm-name').value||'').trim(),email:(document.getElementById('adm-email').value||'').trim(),role:document.getElementById('adm-role').value,team_id:document.getElementById('adm-team').value||null};if(!body.full_name||!body.email){msg('Preencha nome e e-mail.',true);return;}msg('Enviando convite...');fetch(c.url+'/functions/v1/admin-users',{method:'POST',headers:{'apikey':c.publishableKey,'Authorization':h.Authorization,'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.message||j.error||'Falha ao convidar');return j;});}).then(function(){msg('Usuário criado e convite enviado.');document.getElementById('adm-name').value='';document.getElementById('adm-email').value='';return loadContext();}).then(loadAdmin).catch(function(e){msg(e.message,true);});}
 
-function boot(){if(!window.CRM_CANONICAL){setTimeout(boot,100);return;}rawReload=window.CRM_CANONICAL.reload;rawRefresh=window.refreshCRM;window.CRM_SCOPE={get:function(){return scope;},set:setScope,meta:function(){return ctx;},allowFollowup:allowFollowup,reload:scopedReload};window.CRM_CANONICAL.reload=scopedReload;window.refreshCRM=function(){try{if(typeof showToast==='function')showToast('Atualizando pelo Supabase...');}catch(e){}return scopedReload().then(function(rows){try{if(typeof showToast==='function')showToast('Atualizado: '+rows.length+' leads nesta visão.');}catch(e){}return rows;});};window.save=function(){saveChain=saveChain.then(persist).catch(function(e){try{if(typeof showToast==='function')showToast('Não foi possível salvar: '+e.message);}catch(_){}return scopedReload().catch(function(){});});return saveChain;};injectStyles();scopedReload();window.addEventListener('message',function(ev){if(ev.source===window&&ev.data&&ev.data.type==='CRM_UPDATED')setTimeout(scopedReload,850);});}
+function boot(){if(!window.CRM_CANONICAL){setTimeout(boot,100);return;}rawReload=window.CRM_CANONICAL.reload;rawRefresh=window.refreshCRM;window.CRM_SCOPE={get:function(){return scope;},set:setScope,meta:function(){return ctx;},allowFollowup:allowFollowup,reload:scopedReload};window.CRM_CANONICAL.reload=scopedReload;window.refreshCRM=function(){try{if(typeof showToast==='function')showToast('Atualizando pelo Supabase...');}catch(e){}return scopedReload().then(function(rows){try{if(typeof showToast==='function')showToast('Atualizado: '+rows.length+' leads nesta visão.');}catch(e){}return rows;});};window.save=function(){saveChain=saveChain.then(persist).catch(function(e){try{if(typeof showToast==='function')showToast('Não foi possível salvar: '+e.message);}catch(_){}return scopedReload().catch(function(){});});return saveChain;};injectStyles();scopedReload();/* CRM_UPDATED já é coordenado pela camada canônica; não registrar um segundo reload aqui. */}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else setTimeout(boot,0);
 })();
