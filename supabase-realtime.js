@@ -54,6 +54,7 @@ function loadUiEnhancements(){
   add('script[data-tm-edit-identity-guard]','edit-identity-guard.js?v=20260923-1234','tmEditIdentityGuard');
   add('script[data-tm-daily-kanban-origins]','daily-kanban-origins-ui.js?v=20260923-2350','tmDailyKanbanOrigins');
   add('script[data-tm-regions-ui]','regions-ui.js?v=20260923-1234','tmRegionsUi');
+  add('script[data-tm-actionbar-context]','actionbar-context-ui.js?v=20260923-2357','tmActionbarContext');
 }
 function followupAtivo(){var p=document.getElementById('page-followup');return !!(p&&p.classList.contains('active'));}
 function reloadSoon(forceFull){
