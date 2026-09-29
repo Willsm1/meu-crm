@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import QRCode from 'qrcode';
 import pino from 'pino';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import makeWASocket, {
   Browsers,
   DisconnectReason,
@@ -11,10 +13,12 @@ import makeWASocket, {
 const PORT = Number(process.env.PORT || 8787);
 const AUTH_DIR = process.env.WA_AUTH_DIR || './.auth/taurus-test';
 const logger = pino({ level: process.env.LOG_LEVEL || 'warn' });
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.use(cors({ origin: true, credentials: false }));
 app.use(express.json({ limit: '128kb' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
 let sock = null;
 let starting = null;
@@ -159,7 +163,7 @@ app.post('/session/start', async (_req, res) => {
   }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '127.0.0.1', () => {
   console.log(`[Taurus WhatsApp QR POC] http://127.0.0.1:${PORT}`);
-  console.log('[Gate 1] nenhum lead/mensagem sera gravado; apenas autenticação e persistencia de sessao.');
+  console.log('[Gate 1] nenhum lead/mensagem sera gravado; apenas autenticacao e persistencia de sessao.');
 });
