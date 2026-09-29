@@ -60,7 +60,8 @@ async function connect() {
     const nextSock = makeWASocket({
       auth,
       browser: Browsers.windows('Desktop'),
-      syncFullHistory: true,
+      // Gate 1 is authentication/session persistence only. Do not request chat history.
+      syncFullHistory: false,
       markOnlineOnConnect: false,
       printQRInTerminal: false,
       logger
