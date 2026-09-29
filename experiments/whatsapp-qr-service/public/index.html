@@ -6,24 +6,31 @@
 <title>Taurus Magnum — Teste WhatsApp QR</title>
 <style>
 :root{--bg:#07101e;--card:#0e1728;--line:#24466f;--blue:#60a5fa;--green:#34d399;--red:#f87171;--text:#e5eefb;--muted:#7890ad}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(520px,calc(100vw - 28px));padding:24px;border:1px solid rgba(96,165,250,.35);border-radius:18px;background:var(--card);box-shadow:0 0 30px rgba(59,130,246,.10)}h1{font-size:20px;margin:0 0 6px}.sub{color:var(--muted);font-size:13px;line-height:1.45;margin-bottom:18px}button{width:100%;background:#173b74;color:#dbeafe;border:1px solid #3b82f6;border-radius:10px;padding:11px 14px;font-weight:700;cursor:pointer}.status{margin:16px 0;padding:12px;border-radius:12px;background:#091323;border:1px solid rgba(96,165,250,.15);font-size:13px}.status b{color:var(--blue)}#qrWrap{display:none;text-align:center;padding:14px}.qr{background:white;padding:12px;border-radius:12px;max-width:330px;width:100%}.ok{color:var(--green)}.bad{color:var(--red)}.note{font-size:12px;color:var(--muted);line-height:1.45;margin-top:14px}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(560px,calc(100vw - 28px));padding:24px;border:1px solid rgba(96,165,250,.35);border-radius:18px;background:var(--card);box-shadow:0 0 30px rgba(59,130,246,.10)}h1{font-size:20px;margin:0 0 6px}.sub{color:var(--muted);font-size:13px;line-height:1.45;margin-bottom:18px}.row{display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:10px}input{width:100%;background:#091323;color:var(--text);border:1px solid rgba(96,165,250,.28);border-radius:10px;padding:11px 12px;outline:none}button{background:#173b74;color:#dbeafe;border:1px solid #3b82f6;border-radius:10px;padding:11px 14px;font-weight:700;cursor:pointer}.wide{width:100%}.status{margin:16px 0;padding:12px;border-radius:12px;background:#091323;border:1px solid rgba(96,165,250,.15);font-size:13px}.status b{color:var(--blue)}#qrWrap{display:none;text-align:center;padding:14px}.qr{background:white;padding:12px;border-radius:12px;max-width:330px;width:100%}.ok{color:var(--green)}.bad{color:var(--red)}.note{font-size:12px;color:var(--muted);line-height:1.45;margin-top:14px}.mini{font-size:12px;color:var(--muted);margin-top:8px}
 </style>
 </head>
 <body>
 <div class="card">
   <h1>⚡ Taurus Magnum — WhatsApp QR TESTE</h1>
-  <div class="sub">Gate 1: validar somente o pareamento por QR e a persistência da sessão. Nenhuma conversa, lead ou follow-up será gravado.</div>
-  <button id="start">Gerar QR / reconectar sessão</button>
-  <div class="status">Status: <b id="phase">aguardando</b><div id="detail"></div></div>
+  <div class="sub">Gate 2: múltiplas sessões WhatsApp + observação de eventos. Nenhum lead, follow-up ou dado será gravado no Supabase.</div>
+  <div class="row">
+    <input id="sessionId" value="taurus-test" aria-label="Session ID" placeholder="sessionId ex.: taurus-test ou whatsapp-2">
+    <button id="apply">Usar sessão</button>
+  </div>
+  <button id="start" class="wide">Gerar QR / reconectar sessão</button>
+  <div class="status">Sessão: <b id="sessionLabel">taurus-test</b><br>Status: <b id="phase">aguardando</b><div id="detail"></div><div class="mini" id="eventCount"></div></div>
   <div id="qrWrap"><img id="qr" class="qr" alt="QR do WhatsApp"></div>
-  <div class="note">No celular: WhatsApp → Dispositivos conectados → Conectar dispositivo → leia o QR. O status deve mudar para <span class="ok">connected</span>. Depois reiniciaremos o serviço para provar que a sessão persiste sem novo QR.</div>
+  <div class="note">Cada sessionId mantém credenciais, socket e eventos separados. Para conectar um segundo WhatsApp sem derrubar o primeiro, use outro ID (por exemplo <b>whatsapp-2</b>), clique em <b>Usar sessão</b> e depois em <b>Gerar QR / reconectar sessão</b>.</div>
 </div>
 <script>
-const $=s=>document.querySelector(s);let poll=null;
-function paint(s){$('#phase').textContent=s.phase||'—';$('#phase').className=s.connected?'ok':(s.phase==='error'||s.phase==='logged_out'?'bad':'');$('#detail').textContent=s.lastError?(' · '+s.lastError):(s.user&&s.user.id?(' · '+s.user.id):'');if(s.qrDataUrl){$('#qr').src=s.qrDataUrl;$('#qrWrap').style.display='block'}else{$('#qrWrap').style.display='none'}}
-async function status(){try{const r=await fetch('/session/status');paint(await r.json())}catch(e){paint({phase:'serviço indisponível',lastError:e.message})}}
-$('#start').onclick=async()=>{try{paint({phase:'iniciando'});const r=await fetch('/session/start',{method:'POST'});paint(await r.json());clearInterval(poll);poll=setInterval(status,1000)}catch(e){paint({phase:'erro',lastError:e.message})}};
-status();poll=setInterval(status,2000);
+const $=s=>document.querySelector(s);let poll=null;let currentSession='taurus-test';
+function cleanId(v){return String(v||'').trim().toLowerCase()}
+function paint(s){$('#sessionLabel').textContent=s.sessionId||currentSession;$('#phase').textContent=s.phase||'—';$('#phase').className=s.connected?'ok':(s.phase==='error'||s.phase==='logged_out'?'bad':'');$('#detail').textContent=s.lastError?(' · '+s.lastError):(s.user&&s.user.id?(' · '+s.user.id):'');$('#eventCount').textContent='eventos: '+(s.eventCount??0);if(s.qrDataUrl){$('#qr').src=s.qrDataUrl;$('#qrWrap').style.display='block'}else{$('#qrWrap').style.display='none'}}
+async function status(){try{const r=await fetch('/session/'+encodeURIComponent(currentSession)+'/status');paint(await r.json())}catch(e){paint({sessionId:currentSession,phase:'serviço indisponível',lastError:e.message})}}
+function restartPoll(){clearInterval(poll);poll=setInterval(status,1000)}
+$('#apply').onclick=()=>{const id=cleanId($('#sessionId').value);if(!id)return;currentSession=id;$('#sessionId').value=id;paint({sessionId:id,phase:'idle',connected:false,eventCount:0});status();restartPoll()};
+$('#start').onclick=async()=>{try{paint({sessionId:currentSession,phase:'iniciando',connected:false,eventCount:0});const r=await fetch('/session/'+encodeURIComponent(currentSession)+'/start',{method:'POST'});paint(await r.json());restartPoll()}catch(e){paint({sessionId:currentSession,phase:'erro',lastError:e.message})}};
+status();restartPoll();
 </script>
 </body>
 </html>
