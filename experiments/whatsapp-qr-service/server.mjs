@@ -3,6 +3,7 @@ import cors from 'cors';
 import QRCode from 'qrcode';
 import pino from 'pino';
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import makeWASocket, {
   Browsers,
@@ -23,6 +24,11 @@ app.use(express.json({ limit: '128kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const sessions = new Map();
+const FOLLOWUP_MESSAGE_TYPES = new Set([
+  'conversation', 'extendedTextMessage', 'imageMessage', 'videoMessage',
+  'audioMessage', 'documentMessage', 'stickerMessage', 'contactMessage',
+  'contactsArrayMessage', 'locationMessage', 'liveLocationMessage'
+]);
 
 function normalizeSessionId(value) {
   const id = String(value || '').trim().toLowerCase();
@@ -63,6 +69,7 @@ function patch(session, next) {
 }
 
 function statusPayload(session) {
+  const candidates = session.events.filter(e => e.eligibleForFollowup).length;
   return {
     sessionId: session.sessionId,
     phase: session.state.phase,
@@ -72,6 +79,7 @@ function statusPayload(session) {
     user: session.state.user,
     lastError: session.state.lastError,
     eventCount: session.events.length,
+    followupCandidateCount: candidates,
     updatedAt: session.state.updatedAt
   };
 }
@@ -89,6 +97,22 @@ function asEpochMs(value) {
   return Number.isFinite(n) ? (n > 1e12 ? n : n * 1000) : null;
 }
 
+function phoneFromJid(jid) {
+  const s = String(jid || '');
+  const m = s.match(/^(\d+)@s\.whatsapp\.net$/);
+  return m ? m[1] : null;
+}
+
+function classifyForFollowup(event) {
+  if (!event.live || event.upsertType !== 'notify') return { eligible: false, reason: 'historico_ou_sync' };
+  if (!event.hasMessage) return { eligible: false, reason: 'sem_payload' };
+  const jid = String(event.chatJid || '');
+  if (jid.endsWith('@g.us')) return { eligible: false, reason: 'grupo' };
+  if (jid === 'status@broadcast' || jid.endsWith('@broadcast')) return { eligible: false, reason: 'broadcast_status' };
+  if (!FOLLOWUP_MESSAGE_TYPES.has(event.messageType)) return { eligible: false, reason: 'tipo_tecnico_ou_nao_relevante' };
+  return { eligible: true, reason: null };
+}
+
 function pushEvent(session, event) {
   session.events.push(event);
   if (session.events.length > MAX_EVENTS_PER_SESSION) {
@@ -102,6 +126,9 @@ function captureMessageUpsert(session, upsert) {
   for (const msg of upsert?.messages || []) {
     const jid = msg?.key?.remoteJid || null;
     if (!jid) continue;
+    const chatJidAlt = msg?.key?.remoteJidAlt || null;
+    const participantJid = msg?.key?.participant || null;
+    const participantJidAlt = msg?.key?.participantAlt || null;
     const event = {
       sessionId: session.sessionId,
       source: 'messages.upsert',
@@ -109,7 +136,10 @@ function captureMessageUpsert(session, upsert) {
       live: type === 'notify',
       messageId: msg?.key?.id || null,
       chatJid: jid,
-      participantJid: msg?.key?.participant || null,
+      chatJidAlt,
+      participantJid,
+      participantJidAlt,
+      contactPhone: phoneFromJid(jid) || phoneFromJid(chatJidAlt) || null,
       fromMe: Boolean(msg?.key?.fromMe),
       direction: msg?.key?.fromMe ? 'outbound' : 'inbound',
       messageTimestampMs: asEpochMs(msg?.messageTimestamp),
@@ -117,6 +147,10 @@ function captureMessageUpsert(session, upsert) {
       hasMessage: Boolean(msg?.message),
       messageType: msg?.message ? Object.keys(msg.message)[0] || null : null
     };
+    const classification = classifyForFollowup(event);
+    event.eligibleForFollowup = classification.eligible;
+    event.ignoreReason = classification.reason;
+    event.dedupeKey = `${session.sessionId}:${event.messageId || 'sem-id'}`;
     pushEvent(session, event);
   }
 }
@@ -149,35 +183,19 @@ async function connect(sessionId = DEFAULT_SESSION_ID) {
       if (qr) {
         let qrDataUrl = null;
         try {
-          qrDataUrl = await QRCode.toDataURL(qr, {
-            margin: 2,
-            width: 320,
-            errorCorrectionLevel: 'M'
-          });
+          qrDataUrl = await QRCode.toDataURL(qr, { margin: 2, width: 320, errorCorrectionLevel: 'M' });
         } catch (err) {
           logger.warn({ err, sessionId: session.sessionId }, 'failed to render qr');
         }
-        patch(session, {
-          phase: 'qr',
-          connected: false,
-          qr,
-          qrDataUrl,
-          lastError: null
-        });
+        patch(session, { phase: 'qr', connected: false, qr, qrDataUrl, lastError: null });
       }
 
       if (connection === 'open') {
         if (session.reconnectTimer) clearTimeout(session.reconnectTimer);
         session.reconnectTimer = null;
         patch(session, {
-          phase: 'connected',
-          connected: true,
-          qr: null,
-          qrDataUrl: null,
-          user: nextSock.user ? {
-            id: nextSock.user.id || null,
-            name: nextSock.user.name || null
-          } : null,
+          phase: 'connected', connected: true, qr: null, qrDataUrl: null,
+          user: nextSock.user ? { id: nextSock.user.id || null, name: nextSock.user.name || null } : null,
           lastError: null
         });
       }
@@ -186,20 +204,14 @@ async function connect(sessionId = DEFAULT_SESSION_ID) {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const loggedOut = statusCode === DisconnectReason.loggedOut;
         patch(session, {
-          phase: loggedOut ? 'logged_out' : 'disconnected',
-          connected: false,
-          qr: null,
-          qrDataUrl: null,
+          phase: loggedOut ? 'logged_out' : 'disconnected', connected: false, qr: null, qrDataUrl: null,
           lastError: lastDisconnect?.error?.message || String(lastDisconnect?.error || 'connection closed')
         });
         session.sock = null;
-
         if (!loggedOut && !session.reconnectTimer) {
           session.reconnectTimer = setTimeout(() => {
             session.reconnectTimer = null;
-            connect(session.sessionId).catch(err => {
-              patch(session, { phase: 'error', lastError: err.message || String(err) });
-            });
+            connect(session.sessionId).catch(err => patch(session, { phase: 'error', lastError: err.message || String(err) }));
           }, 1500);
         }
       }
@@ -208,13 +220,21 @@ async function connect(sessionId = DEFAULT_SESSION_ID) {
     return statusPayload(session);
   })();
 
+  try { return await session.starting; }
+  catch (err) { patch(session, { phase: 'error', connected: false, lastError: err.message || String(err) }); throw err; }
+  finally { session.starting = null; }
+}
+
+async function restorePersistedSessions() {
   try {
-    return await session.starting;
+    await fs.mkdir(AUTH_ROOT, { recursive: true });
+    const entries = await fs.readdir(AUTH_ROOT, { withFileTypes: true });
+    const ids = entries.filter(e => e.isDirectory()).map(e => e.name).filter(id => /^[a-z0-9][a-z0-9_-]{0,63}$/.test(id));
+    for (const id of ids) {
+      connect(id).catch(err => logger.warn({ err, sessionId: id }, 'autostart session failed'));
+    }
   } catch (err) {
-    patch(session, { phase: 'error', connected: false, lastError: err.message || String(err) });
-    throw err;
-  } finally {
-    session.starting = null;
+    logger.warn({ err }, 'failed to scan persisted sessions');
   }
 }
 
@@ -222,49 +242,44 @@ function sessionFromRequest(req) {
   return getSession(req.params.sessionId || req.query.sessionId || DEFAULT_SESSION_ID);
 }
 
+function candidateView(event) {
+  return {
+    sessionId: event.sessionId,
+    messageId: event.messageId,
+    dedupeKey: event.dedupeKey,
+    direction: event.direction,
+    messageTimestampMs: event.messageTimestampMs,
+    receivedAtMs: event.receivedAtMs,
+    messageType: event.messageType,
+    chatJid: event.chatJid,
+    chatJidAlt: event.chatJidAlt,
+    contactPhone: event.contactPhone,
+    eligibleForFollowup: event.eligibleForFollowup,
+    ignoreReason: event.ignoreReason
+  };
+}
+
 app.get('/health', (_req, res) => {
-  res.json({
-    ok: true,
-    service: 'taurus-whatsapp-qr-poc',
-    gate: 2,
-    sessions: [...sessions.values()].map(statusPayload)
-  });
+  res.json({ ok: true, service: 'taurus-whatsapp-qr-poc', gate: 3, mode: 'observer', sessions: [...sessions.values()].map(statusPayload) });
 });
 
-app.get('/sessions', (_req, res) => {
-  res.json({ sessions: [...sessions.values()].map(statusPayload) });
-});
-
-app.get('/session/status', (req, res) => {
-  res.json(statusPayload(sessionFromRequest(req)));
-});
+app.get('/sessions', (_req, res) => res.json({ sessions: [...sessions.values()].map(statusPayload) }));
+app.get('/session/status', (req, res) => res.json(statusPayload(sessionFromRequest(req))));
 
 app.post('/session/start', async (req, res) => {
   const sessionId = req.body?.sessionId || req.query.sessionId || DEFAULT_SESSION_ID;
-  try {
-    const payload = await connect(sessionId);
-    res.json({ ok: true, ...payload });
-  } catch (err) {
-    const session = getSession(sessionId);
-    res.status(500).json({ ok: false, error: err.message || String(err), ...statusPayload(session) });
-  }
+  try { res.json({ ok: true, ...(await connect(sessionId)) }); }
+  catch (err) { res.status(500).json({ ok: false, error: err.message || String(err), ...statusPayload(getSession(sessionId)) }); }
 });
 
 app.get('/session/:sessionId/status', (req, res) => {
-  try {
-    res.json(statusPayload(getSession(req.params.sessionId)));
-  } catch (err) {
-    res.status(400).json({ ok: false, error: err.message || String(err) });
-  }
+  try { res.json(statusPayload(getSession(req.params.sessionId))); }
+  catch (err) { res.status(400).json({ ok: false, error: err.message || String(err) }); }
 });
 
 app.post('/session/:sessionId/start', async (req, res) => {
-  try {
-    const payload = await connect(req.params.sessionId);
-    res.json({ ok: true, ...payload });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message || String(err) });
-  }
+  try { res.json({ ok: true, ...(await connect(req.params.sessionId)) }); }
+  catch (err) { res.status(500).json({ ok: false, error: err.message || String(err) }); }
 });
 
 app.get('/session/:sessionId/events', (req, res) => {
@@ -272,27 +287,40 @@ app.get('/session/:sessionId/events', (req, res) => {
     const session = getSession(req.params.sessionId);
     const requested = Number(req.query.limit || 100);
     const limit = Math.max(1, Math.min(500, Number.isFinite(requested) ? requested : 100));
-    res.json({
-      sessionId: session.sessionId,
-      count: session.events.length,
-      events: session.events.slice(-limit)
-    });
-  } catch (err) {
-    res.status(400).json({ ok: false, error: err.message || String(err) });
-  }
+    res.json({ sessionId: session.sessionId, count: session.events.length, events: session.events.slice(-limit) });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message || String(err) }); }
+});
+
+app.get('/followup/candidates', (req, res) => {
+  const sessionId = req.query.sessionId ? normalizeSessionId(req.query.sessionId) : null;
+  const requested = Number(req.query.limit || 100);
+  const limit = Math.max(1, Math.min(500, Number.isFinite(requested) ? requested : 100));
+  const source = sessionId ? [getSession(sessionId)] : [...sessions.values()];
+  const rows = source.flatMap(s => s.events.filter(e => e.eligibleForFollowup).map(candidateView));
+  rows.sort((a, b) => (b.messageTimestampMs || b.receivedAtMs || 0) - (a.messageTimestampMs || a.receivedAtMs || 0));
+  res.json({ mode: 'observer', writesEnabled: false, count: rows.length, candidates: rows.slice(0, limit) });
+});
+
+app.get('/followup/observer', (_req, res) => {
+  const sessionRows = [...sessions.values()].map(statusPayload);
+  const candidates = [...sessions.values()].flatMap(s => s.events.filter(e => e.eligibleForFollowup).map(candidateView));
+  const ignored = [...sessions.values()].flatMap(s => s.events.filter(e => !e.eligibleForFollowup).map(candidateView));
+  candidates.sort((a, b) => (b.messageTimestampMs || 0) - (a.messageTimestampMs || 0));
+  res.json({
+    mode: 'observer', writesEnabled: false,
+    summary: { sessions: sessionRows.length, connected: sessionRows.filter(s => s.connected).length, candidates: candidates.length, ignored: ignored.length },
+    sessions: sessionRows,
+    candidates: candidates.slice(0, 100)
+  });
 });
 
 app.delete('/session/:sessionId/events', (req, res) => {
-  try {
-    const session = getSession(req.params.sessionId);
-    session.events.length = 0;
-    res.json({ ok: true, sessionId: session.sessionId, count: 0 });
-  } catch (err) {
-    res.status(400).json({ ok: false, error: err.message || String(err) });
-  }
+  try { const session = getSession(req.params.sessionId); session.events.length = 0; res.json({ ok: true, sessionId: session.sessionId, count: 0 }); }
+  catch (err) { res.status(400).json({ ok: false, error: err.message || String(err) }); }
 });
 
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`[Taurus WhatsApp QR POC] http://127.0.0.1:${PORT}`);
-  console.log('[Gate 2] multi-sessao + observacao de eventos; nenhuma gravacao em Supabase.');
+  console.log('[Gate 3] observer visual de follow-up; ZERO gravacoes no Supabase.');
+  restorePersistedSessions();
 });
