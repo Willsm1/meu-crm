@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Taurus Magnum CRM — WhatsApp QR — EXPERIMENTO</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#070d1a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.wrap{max-width:1040px;margin:0 auto;padding:28px}.head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}.brand{font-size:22px;font-weight:800;color:#93c5fd}.tag{font-size:11px;color:#fcd34d;border:1px solid rgba(245,158,11,.45);background:rgba(245,158,11,.08);border-radius:999px;padding:5px 10px}.grid{display:grid;grid-template-columns:minmax(300px,420px) 1fr;gap:16px}@media(max-width:780px){.grid{grid-template-columns:1fr}}.card{background:#0e1628;border:1px solid rgba(59,130,246,.22);border-radius:16px;padding:18px;box-shadow:0 0 22px rgba(59,130,246,.06)}.card h2{margin:0 0 12px;font-size:15px;color:#bfdbfe}.muted{color:#64748b;font-size:12px;line-height:1.5}.status{display:flex;align-items:center;gap:8px;margin:12px 0 16px;font-size:13px}.dot{width:9px;height:9px;border-radius:50%;background:#64748b}.dot.qr{background:#f59e0b}.dot.connected{background:#34d399;box-shadow:0 0 12px rgba(52,211,153,.65)}.dot.error{background:#ef4444}.service{display:flex;gap:8px;margin:12px 0}.service input{flex:1;min-width:0;background:#080f1e;color:#e2e8f0;border:1px solid rgba(96,165,250,.25);border-radius:9px;padding:10px 11px;outline:none}.btns{display:flex;gap:8px;flex-wrap:wrap}.btn{border:1px solid rgba(96,165,250,.28);background:#13213a;color:#bfdbfe;border-radius:9px;padding:9px 13px;cursor:pointer;font-weight:700}.btn.primary{background:#1d4ed8;color:#fff}.btn.danger{border-color:rgba(239,68,68,.3);color:#fca5a5;background:rgba(239,68,68,.08)}#qrBox{min-height:354px;display:flex;align-items:center;justify-content:center;background:#080f1e;border:1px dashed rgba(96,165,250,.22);border-radius:14px;padding:16px;margin-top:14px}#qrBox img{width:320px;height:320px;max-width:100%;object-fit:contain;background:#fff;border-radius:8px}.events{height:520px;overflow:auto;background:#080f1e;border:1px solid rgba(96,165,250,.16);border-radius:12px;padding:10px}.evt{border-bottom:1px solid rgba(96,165,250,.10);padding:9px 7px}.evt:last-child{border-bottom:0}.evt b{font-size:12px;color:#93c5fd}.evt span{display:block;margin-top:3px;font-size:11px;color:#94a3b8;word-break:break-word}.ok{color:#86efac}.warn{color:#fcd34d}.foot{margin-top:16px;padding:12px 14px;border:1px solid rgba(59,130,246,.14);border-radius:12px;color:#64748b;font-size:11px;line-height:1.55}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head"><div><div class="brand">⚡ Taurus Magnum — WhatsApp QR</div><div class="muted">Prova de conceito isolada. Não altera a main e não grava mensagens no CRM.</div></div><div class="tag">EXPERIMENTO</div></div>
+  <div class="grid">
+    <section class="card">
+      <h2>Conexão</h2>
+      <div class="service"><input id="service" value="http://127.0.0.1:8787" aria-label="URL do serviço"></div>
+      <div class="btns"><button class="btn primary" id="connect">Gerar QR / Conectar</button><button class="btn danger" id="disconnect">Desconectar</button></div>
+      <div class="status"><span class="dot" id="dot"></span><span id="statusText">Aguardando serviço</span></div>
+      <div id="qrBox"><div class="muted">Quando o serviço estiver ativo, clique em “Gerar QR / Conectar”.</div></div>
+      <div class="foot">Neste primeiro teste o QR apenas cria uma sessão vinculada como um dispositivo WhatsApp Web e mostra eventos recebidos. A integração com Follow-up/Supabase fica desligada até a conexão ser validada.</div>
+    </section>
+    <section class="card">
+      <h2>Eventos da conversa — somente teste</h2>
+      <div class="muted" style="margin-bottom:10px">Mostra eventos normalizados recebidos pelo serviço. Não envia mensagens e não altera leads.</div>
+      <div class="events" id="events"></div>
+    </section>
+  </div>
+</div>
+<script>
+(function(){
+  const service=document.getElementById('service'),statusText=document.getElementById('statusText'),dot=document.getElementById('dot'),qrBox=document.getElementById('qrBox'),events=document.getElementById('events');
+  let es=null;
+  function base(){return String(service.value||'').replace(/\/+$/,'');}
+  function setStatus(s){
+    dot.className='dot'+(s==='connected'?' connected':s==='qr'?' qr':s==='error'?' error':'');
+    const labels={idle:'Desconectado',connecting:'Conectando…',qr:'QR disponível — escaneie no WhatsApp',connected:'WhatsApp conectado',disconnected:'Conexão caiu — tentando reconectar',logged_out:'Sessão removida',error:'Erro de conexão'};
+    statusText.textContent=labels[s]||s||'Aguardando serviço';
+  }
+  function addEvent(e){
+    const d=document.createElement('div');d.className='evt';
+    const phone=e.phone?('+'+e.phone):e.remoteJid;
+    d.innerHTML='<b>'+String(e.direction||'evento')+' · '+String(phone||'sem telefone')+'</b><span>'+String(e.occurredAt||'')+(e.textPreview?' · '+escapeHtml(e.textPreview):'')+'</span>';
+    events.prepend(d);while(events.children.length>100)events.lastChild.remove();
+  }
+  function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function applyState(st){setStatus(st.status);if(st.qrDataUrl){qrBox.innerHTML='<img alt="QR WhatsApp">';qrBox.querySelector('img').src=st.qrDataUrl;}else if(st.status==='connected'){qrBox.innerHTML='<div class="ok">✓ Sessão conectada<br><span class="muted">'+escapeHtml(st.connectedJid||'')+'</span></div>';}else if(st.status!=='qr'){qrBox.innerHTML='<div class="muted">'+escapeHtml(st.lastError||'Aguardando QR…')+'</div>';}}
+  function openEvents(){if(es)es.close();es=new EventSource(base()+'/api/events');es.onmessage=ev=>{try{const p=JSON.parse(ev.data);if(p.type==='state')applyState(p.state||{});if(p.type==='message')addEvent(p.event||{});}catch{}};es.onerror=()=>{setStatus('error');};}
+  async function post(path){const r=await fetch(base()+path,{method:'POST'});if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}
+  document.getElementById('connect').onclick=async()=>{try{openEvents();await post('/api/session/start');}catch(e){setStatus('error');qrBox.innerHTML='<div class="warn">'+escapeHtml(e.message)+'</div>';}};
+  document.getElementById('disconnect').onclick=async()=>{try{await post('/api/session/disconnect');}catch{};if(es){es.close();es=null;}setStatus('idle');qrBox.innerHTML='<div class="muted">Sessão interrompida.</div>';};
+})();
+</script>
+</body>
+</html>
