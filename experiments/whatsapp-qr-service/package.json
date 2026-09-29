@@ -7,7 +7,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node bootstrap.mjs"
   },
   "dependencies": {
     "baileys": "github:WhiskeySockets/Baileys#0af2386292907f7d9742d8d41f830d8c48208fa1",
