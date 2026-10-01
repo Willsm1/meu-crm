@@ -63,7 +63,7 @@ require(wa_loader, 'crm-whatsapp-media-preview.js', 'validated media preview loa
 require(wa_loader, 'whatsapp-followup-bridge-hosted.js', 'hosted Follow-up bridge loaded', 1)
 require(wa_loader, 'crm-whatsapp-followup-hosted-adapter.js', 'hosted KPI adapter loaded', 1)
 require(wa_loader, 'crm-whatsapp-connections.js', 'multi-WhatsApp manager loaded', 1)
-require(wa_media_compat, '127.0.0.1:8788', 'legacy media source translated')
+require(wa_media_compat, 'isLegacyMedia', 'legacy media source translated')
 require(wa_media_compat, '/api/whatsapp/media/', 'hosted media endpoint used')
 require(wa_media_compat, 'getLeadAssets', 'stored media hydration preserved')
 
