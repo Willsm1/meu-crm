@@ -1,35 +1,40 @@
-/* Taurus Magnum CRM — análise IA direta no CRM — TEST BRANCH ONLY */
+/* Taurus Magnum CRM — handoff IA sem custo de API — TEST BRANCH ONLY */
 (function(){
 'use strict';
 if(window.__TM_WA_AI_DIRECT__) return;
 window.__TM_WA_AI_DIRECT__=true;
 const $=(s,r=document)=>r.querySelector(s);
-let activeLeadId=null;
-function cfg(){return window.CRM_SUPABASE&&window.CRM_SUPABASE.config||null}
-function token(){const c=cfg();if(!c)return null;try{const raw=localStorage.getItem('sb-'+c.projectRef+'-auth-token');if(!raw)return null;const s=JSON.parse(raw);return s&&(s.access_token||(s.currentSession&&s.currentSession.access_token))||null}catch(_e){return null}}
-function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-async function analyze(){
- const c=cfg(),t=token(),mode=$('#tm-wa-gpt-mode')?.value||'next',btn=$('#tm-wa-ai-direct-btn'),box=$('#tm-wa-ai-direct-result'),st=$('#tm-wa-ai-direct-status');
- if(!activeLeadId||!c||!t){if(st)st.textContent='Sessão/lead indisponível.';return}
- btn.disabled=true;btn.textContent='Analisando...';st.textContent='CRM + WhatsApp + memória TXT + Base Taurus → IA';box.innerHTML='';
- try{
-  const r=await fetch(c.url+'/functions/v1/taurus-ai-analyze',{method:'POST',headers:{'apikey':c.publishableKey,'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({lead_id:activeLeadId,mode})});
-  const data=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
-  box.innerHTML=`<div style="white-space:pre-wrap;line-height:1.6;color:#dbeafe;font-size:13px">${esc(data.analysis||'Sem resposta.')}</div>`;
-  st.textContent=`✓ Análise gerada no CRM · ${data.model||'modelo IA'} · ${data.knowledge_sources||0} fonte(s) Taurus`;
- }catch(err){st.textContent='Falha na análise: '+String(err?.message||err);box.innerHTML=''}
- finally{btn.disabled=false;btn.textContent='Gerar análise no CRM'}
+
+async function copyPrompt(text){
+  if(!text) throw new Error('Briefing vazio');
+  if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text);return}
+  const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();
 }
+
+async function openWithChatGPT(){
+  const prompt=$('#tm-wa-gpt-prompt')?.value||'';
+  const st=$('#tm-wa-ai-direct-status');
+  if(!prompt){if(st)st.textContent='Briefing ainda não carregado.';return}
+  // Abre a aba imediatamente para não ser bloqueada pelo navegador; depois copia o briefing.
+  const tab=window.open('about:blank','_blank');
+  try{
+    await copyPrompt(prompt);
+    if(tab) tab.location.href='https://chatgpt.com/'; else window.open('https://chatgpt.com/','_blank','noopener');
+    if(st)st.textContent='✓ Briefing copiado. No ChatGPT, cole com Cmd+V e envie.';
+  }catch(err){
+    if(tab) tab.close();
+    if(st)st.textContent='Não consegui copiar automaticamente. Use “Copiar briefing” e depois abra o ChatGPT.';
+  }
+}
+
 function inject(){
  const body=$('#tm-wa-gpt-body');if(!body||$('#tm-wa-ai-direct-wrap',body))return;
  const status=$('#tm-wa-gpt-status',body);if(!status)return;
  const wrap=document.createElement('div');wrap.id='tm-wa-ai-direct-wrap';wrap.style.cssText='margin:10px 0 12px;border:1px solid rgba(59,130,246,.28);background:#08111f;border-radius:10px;padding:10px';
- wrap.innerHTML='<div style="display:flex;gap:8px;align-items:center"><button class="btn btn-primary" id="tm-wa-ai-direct-btn" style="flex:1">Gerar análise no CRM</button><span id="tm-wa-ai-direct-status" style="font-size:10px;color:#93c5fd"></span></div><div id="tm-wa-ai-direct-result" style="margin-top:10px"></div>';
- status.after(wrap);$('#tm-wa-ai-direct-btn',wrap).onclick=analyze;
- const mode=$('#tm-wa-gpt-mode',body);if(mode)mode.addEventListener('change',()=>{const b=$('#tm-wa-ai-direct-result',body),s=$('#tm-wa-ai-direct-status',body);if(b)b.innerHTML='';if(s)s.textContent='Modo alterado — gere uma nova análise.'});
+ wrap.innerHTML=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn btn-primary" id="tm-wa-ai-chatgpt-btn" style="flex:1;min-width:220px">Analisar com meu ChatGPT</button><span id="tm-wa-ai-direct-status" style="font-size:10px;color:#93c5fd;flex:2;min-width:260px">Sem custo de API Taurus: usa a conta ChatGPT aberta neste navegador.</span></div><div style="margin-top:7px;font-size:10px;color:#64748b">O CRM já monta o briefing com CRM + WhatsApp + memória TXT + Base Taurus. Por segurança do navegador, o último passo é colar o briefing no ChatGPT.</div>`;
+ status.after(wrap);$('#tm-wa-ai-chatgpt-btn',wrap).onclick=openWithChatGPT;
+ const mode=$('#tm-wa-gpt-mode',body);if(mode)mode.addEventListener('change',()=>{const s=$('#tm-wa-ai-direct-status',body);if(s)s.textContent='Modo alterado — o briefing foi atualizado. Clique para analisar no ChatGPT.'});
 }
-document.addEventListener('tm:wa-gpt-analyze',e=>{if(e?.detail?.leadId)activeLeadId=e.detail.leadId});
 function boot(){new MutationObserver(()=>setTimeout(inject,0)).observe(document.documentElement,{childList:true,subtree:true});setInterval(inject,400)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
