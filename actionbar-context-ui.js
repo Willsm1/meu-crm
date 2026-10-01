@@ -25,6 +25,14 @@ function sync(){
     else{b.style.setProperty('display','none','important');b.setAttribute('aria-hidden','true');}
   }
 }
+function loadWhatsAppProduction(){
+  if(document.querySelector('script[data-tm-whatsapp-production]'))return;
+  var s=document.createElement('script');
+  s.src='whatsapp-production-loader.js?v=20261001-final1';
+  s.async=false;
+  s.dataset.tmWhatsappProduction='1';
+  document.head.appendChild(s);
+}
 function boot(){
   var s=document.createElement('style');s.id='tm-actionbar-context-style';s.textContent='#sync-status{display:none!important}';document.head.appendChild(s);
   sync();
@@ -32,6 +40,7 @@ function boot(){
   document.addEventListener('click',function(e){if(e.target&&e.target.closest&&e.target.closest('.nav-tab'))setTimeout(sync,0);},true);
   window.addEventListener('focus',sync);
   var n=0,t=setInterval(function(){sync();if(++n>=30)clearInterval(t);},100);
+  loadWhatsAppProduction();
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
