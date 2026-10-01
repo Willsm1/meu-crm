@@ -27,7 +27,7 @@ var files=[
   ['tm-wa-archive-hotfix',CDN+'crm-whatsapp-archive-hotfix.js?v='+PIN],
   ['tm-wa-ai-direct',CDN+'crm-whatsapp-ai-direct.js?v='+PIN],
   ['tm-wa-runtime',CURRENT+'crm-whatsapp-runtime.js?v=20261001-1'],
-  ['tm-wa-connections',CURRENT+'crm-whatsapp-connections.js?v=20261001-1']
+  ['tm-wa-connections',CURRENT+'crm-whatsapp-connections.js?v=20261001-2']
 ];
 var f=document.getElementById('crm'),status=document.getElementById('boot');
 function load(d,id,src){return new Promise(function(ok,fail){if(d.getElementById(id))return ok();var s=d.createElement('script');s.id=id;s.src=src;s.onload=ok;s.onerror=function(){fail(new Error(src));};d.body.appendChild(s);});}
