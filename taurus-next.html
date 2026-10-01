@@ -26,7 +26,7 @@ var files=[
   ['tm-wa-media',CDN+'crm-whatsapp-media-preview.js?v='+PIN],
   ['tm-wa-archive-hotfix',CDN+'crm-whatsapp-archive-hotfix.js?v='+PIN],
   ['tm-wa-ai-direct',CDN+'crm-whatsapp-ai-direct.js?v='+PIN],
-  ['tm-wa-runtime',CURRENT+'crm-whatsapp-runtime.js?v=20261001-1'],
+  ['tm-wa-runtime',CURRENT+'crm-whatsapp-runtime.js?v=20261001-3'],
   ['tm-wa-connections',CURRENT+'crm-whatsapp-connections.js?v=20261001-2']
 ];
 var f=document.getElementById('crm'),status=document.getElementById('boot');
@@ -35,7 +35,7 @@ f.addEventListener('load',function(){
   try{
     var d=f.contentDocument,p=Promise.resolve();
     files.forEach(function(x){p=p.then(function(){return load(d,x[0],x[1]);});});
-    p.then(function(){status.textContent='Taurus Next · módulos validados + multi-WhatsApp carregados';setTimeout(function(){status.style.opacity='.35';},2500);})
+    p.then(function(){status.textContent='Taurus Next · gateway Render conectado';setTimeout(function(){status.style.opacity='.35';},2500);})
      .catch(function(e){status.textContent='Falha ao carregar '+e.message;status.style.color='#fca5a5';});
   }catch(e){status.textContent='Falha na prévia: '+e.message;status.style.color='#fca5a5';}
 });
