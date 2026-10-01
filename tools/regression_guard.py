@@ -23,6 +23,7 @@ realtime = require_file("supabase-realtime.js")
 duplicates = require_file("duplicates-ui.js")
 actionbar = require_file("actionbar-context-ui.js")
 wa_loader = require_file("whatsapp-production-loader.js")
+wa_media_compat = require_file("crm-whatsapp-hosted-media-compat.js")
 require_file("supabase-canonical.js")
 require_file("followup-agendar-ui.js")
 require_file("followup-schedule-ui.js")
@@ -54,6 +55,7 @@ require(duplicates, 'Interações antigas não serão movidas nem apagadas', 'ap
 # Direct WhatsApp-on-main integration invariants
 require(actionbar, 'whatsapp-production-loader.js', 'WhatsApp production loader attached to current main UI stack', 1)
 require(wa_loader, 'crm-whatsapp-runtime.js', 'hosted WhatsApp runtime loaded', 1)
+require(wa_loader, 'crm-whatsapp-hosted-media-compat.js', 'hosted media compatibility loaded', 1)
 require(wa_loader, 'crm-whatsapp-followup-visual.js', 'validated Follow-up visual loaded', 1)
 require(wa_loader, 'crm-whatsapp-matching-visual.js', 'validated matching UI loaded', 1)
 require(wa_loader, 'crm-whatsapp-storage-gate.js', 'validated storage gate loaded', 1)
@@ -61,6 +63,9 @@ require(wa_loader, 'crm-whatsapp-media-preview.js', 'validated media preview loa
 require(wa_loader, 'whatsapp-followup-bridge-hosted.js', 'hosted Follow-up bridge loaded', 1)
 require(wa_loader, 'crm-whatsapp-followup-hosted-adapter.js', 'hosted KPI adapter loaded', 1)
 require(wa_loader, 'crm-whatsapp-connections.js', 'multi-WhatsApp manager loaded', 1)
+require(wa_media_compat, '127.0.0.1:8788', 'legacy media source translated')
+require(wa_media_compat, '/api/whatsapp/media/', 'hosted media endpoint used')
+require(wa_media_compat, 'getLeadAssets', 'stored media hydration preserved')
 
 if errors:
     print("REGRESSION GUARD: FAIL")
