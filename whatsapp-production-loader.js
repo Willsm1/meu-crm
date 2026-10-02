@@ -18,7 +18,7 @@ var files=[
   ['tm-wa-ai-direct','crm-whatsapp-ai-direct.js?v=20261001-final1'],
   ['tm-wa-bridge-hosted','whatsapp-followup-bridge-hosted.js?v=20261001-media-persist1'],
   ['tm-wa-followup-hosted','crm-whatsapp-followup-hosted-adapter.js?v=20261001-final2'],
-  ['tm-wa-connections','crm-whatsapp-connections.js?v=20261001-final1']
+  ['tm-wa-connections','crm-whatsapp-connections.js?v=20261001-admin-live1']
 ];
 
 function load(id,src){

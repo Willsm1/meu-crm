@@ -35,6 +35,7 @@ function createSession(userId,slot){return{userId,slot,sessionId:publicId(userId
 function getSession(userId,slot){slot=cleanSlot(slot);const k=key(userId,slot);if(!sessions.has(k))sessions.set(k,createSession(userId,slot));return sessions.get(k)}
 function patch(s,next){s.state={...s.state,...next,updatedAt:new Date().toISOString()}}
 function statusPayload(s){return{slot:s.slot,sessionId:s.sessionId,phase:s.state.phase,connected:s.state.connected,qrDataUrl:s.state.qrDataUrl,user:s.state.user,lastError:s.state.lastError,eventCount:s.events.length,followupCandidateCount:s.events.filter(e=>e.eligibleForFollowup).length,directPersistence:Boolean(SUPABASE_SERVICE_KEY),updatedAt:s.state.updatedAt}}
+function adminStatusPayload(s){const p=statusPayload(s);p.qrDataUrl=null;return p}
 function asEpochMs(v){if(v==null)return null;if(typeof v==='number')return v>1e12?v:v*1000;if(typeof v==='bigint')return Number(v)*1000;if(typeof v==='string'){const n=Number(v);return Number.isFinite(n)?(n>1e12?n:n*1000):null}if(typeof v?.toNumber==='function')return v.toNumber()*1000;const n=Number(v);return Number.isFinite(n)?(n>1e12?n:n*1000):null}
 function phoneFromJid(jid){const m=String(jid||'').match(/^(\d+)@s\.whatsapp\.net$/);return m?m[1]:null}
 function messageText(message,type){if(!message||!type)return null;try{if(type==='conversation')return String(message.conversation||'').trim()||null;if(type==='extendedTextMessage')return String(message.extendedTextMessage?.text||'').trim()||null;if(type==='imageMessage')return String(message.imageMessage?.caption||'').trim()||'[imagem]';if(type==='videoMessage')return String(message.videoMessage?.caption||'').trim()||'[vídeo]';if(type==='audioMessage')return'[áudio]';if(type==='stickerMessage')return'[figurinha]';if(type==='documentMessage')return String(message.documentMessage?.fileName||message.documentMessage?.caption||'[documento]').trim();if(type==='contactMessage')return'[contato]';if(type==='contactsArrayMessage')return'[contatos]';if(type==='locationMessage'||type==='liveLocationMessage')return'[localização]'}catch{}return null}
@@ -70,6 +71,20 @@ async function authMw(req,res,next){try{req.taurusUser=await authenticate(req);n
 function userHeaders(auth,extra={}){return{apikey:SUPABASE_KEY,Authorization:auth,'Content-Type':'application/json','Accept-Profile':'crm','Content-Profile':'crm',...extra}}
 async function rpcAsUser(auth,name,args={}){const r=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{method:'POST',headers:userHeaders(auth),body:JSON.stringify(args)});const text=await r.text();if(!r.ok)throw new Error(`${name} ${r.status}: ${text.slice(0,240)}`);try{return text?JSON.parse(text):null}catch{return text}}
 async function uploadAsUser(auth,storagePath,buf,mime){const r=await fetch(`${SUPABASE_URL}/storage/v1/object/whatsapp-media/${encPath(storagePath)}`,{method:'POST',headers:{apikey:SUPABASE_KEY,Authorization:auth,'Content-Type':mime||'application/octet-stream','x-upsert':'true'},body:buf});const text=await r.text();if(!r.ok)throw new Error(`storage ${r.status}: ${text.slice(0,240)}`);return text}
+function firstRow(raw){return Array.isArray(raw)?(raw[0]||{}):(raw||{})}
+function validUuid(v){return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v||''))}
+async function resolveSessionTarget(req){
+  const own=String(req.taurusUser.id||''),requested=String(req.query.target_user_id||'').trim();
+  if(!requested||requested===own)return{userId:own,readOnly:false,viewerRole:null};
+  if(!validUuid(requested))throw Object.assign(new Error('target_user_id inválido'),{status:400});
+  const auth=req.headers.authorization||'';
+  const me=firstRow(await rpcAsUser(auth,'current_profile_context',{}));
+  if(String(me.role||'')!=='admin')throw Object.assign(new Error('acesso administrativo necessário'),{status:403});
+  const opts=await rpcAsUser(auth,'admin_scope_options',{});
+  const allowed=Array.isArray(opts)&&opts.some(p=>String(p?.user_id||'')===requested&&p?.is_active!==false);
+  if(!allowed)throw Object.assign(new Error('executivo fora do escopo administrativo'),{status:403});
+  return{userId:requested,readOnly:true,viewerRole:'admin'};
+}
 async function persistEventMedia(req,s,e){
   if(!e?.media||e.media.status!=='stored_gateway'||!e.media.file||e.media.supabaseStatus==='stored'||e.media.supabaseStatus==='persisting')return;
   e.media.supabaseStatus='persisting';e.media.persistError=null;
@@ -91,9 +106,9 @@ async function persistEventMedia(req,s,e){
 function candidateView(e){return{sessionId:e.sessionId,slot:e.slot,messageId:e.messageId,dedupeKey:e.dedupeKey,direction:e.direction,messageTimestampMs:e.messageTimestampMs,receivedAtMs:e.receivedAtMs,messageType:e.messageType,messageText:e.messageText,chatJid:e.chatJid,chatJidAlt:e.chatJidAlt,contactPhone:e.contactPhone,eligibleForFollowup:e.eligibleForFollowup,ignoreReason:e.ignoreReason,persistenceStatus:e.persistenceStatus||null,media:e.media?{...e.media,url:null}:null}}
 function userSessions(userId){return[...sessions.values()].filter(s=>s.userId===userId)}
 
-app.get('/health',(_req,res)=>res.json({ok:true,service:'taurus-whatsapp-gateway',mode:'hosted-multisession',version:GATEWAY_VERSION,sessions:sessions.size,directPersistence:Boolean(SUPABASE_SERVICE_KEY),dataRoot:DATA_ROOT}));
+app.get('/health',(_req,res)=>res.json({ok:true,service:'taurus-whatsapp-gateway',mode:'hosted-multisession',version:GATEWAY_VERSION,sessions:sessions.size,directPersistence:Boolean(SUPABASE_SERVICE_KEY),dataRoot:DATA_ROOT,adminSessionView:true}));
 app.use('/api/whatsapp',authMw);
-app.get('/api/whatsapp/sessions',(req,res)=>res.json({sessions:userSessions(req.taurusUser.id).map(statusPayload)}));
+app.get('/api/whatsapp/sessions',async(req,res)=>{try{const target=await resolveSessionTarget(req);const rows=userSessions(target.userId).map(s=>target.readOnly?adminStatusPayload(s):statusPayload(s));res.json({sessions:rows,targetUserId:target.userId,readOnly:target.readOnly,viewerRole:target.viewerRole})}catch(err){res.status(err.status||500).json({ok:false,error:err.message||String(err)})}});
 app.post('/api/whatsapp/sessions/:slot/start',async(req,res)=>{try{res.json({ok:true,...await connect(getSession(req.taurusUser.id,req.params.slot))})}catch(err){res.status(500).json({ok:false,error:err.message||String(err)})}});
 app.get('/api/whatsapp/sessions/:slot/status',(req,res)=>{try{res.json(statusPayload(getSession(req.taurusUser.id,req.params.slot)))}catch(err){res.status(400).json({ok:false,error:err.message||String(err)})}});
 app.delete('/api/whatsapp/sessions/:slot',(req,res)=>{(async()=>{try{const s=getSession(req.taurusUser.id,req.params.slot);try{await s.sock?.logout()}catch{}if(s.reconnectTimer)clearTimeout(s.reconnectTimer);sessions.delete(key(s.userId,s.slot));await fs.rm(s.authDir,{recursive:true,force:true});await fs.rm(s.mediaDir,{recursive:true,force:true});res.json({ok:true})}catch(err){res.status(500).json({ok:false,error:err.message||String(err)})}})()});
