@@ -1,0 +1,15 @@
+{
+  "name": "taurus-magnum-whatsapp-gateway",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0-rc.1",
+  "engines": { "node": ">=20.0.0" },
+  "scripts": { "start": "node server.mjs" },
+  "dependencies": {
+    "baileys": "github:WhiskeySockets/Baileys#0af2386292907f7d9742d8d41f830d8c48208fa1",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "pino": "^9.9.0",
+    "qrcode": "^1.5.4"
+  }
+}
