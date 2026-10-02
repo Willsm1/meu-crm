@@ -16,7 +16,7 @@ var files=[
   ['tm-wa-media','crm-whatsapp-media-preview.js?v=20261001-final1'],
   ['tm-wa-archive-hotfix','crm-whatsapp-archive-hotfix.js?v=20261001-final1'],
   ['tm-wa-ai-direct','crm-whatsapp-ai-direct.js?v=20261001-final1'],
-  ['tm-wa-bridge-hosted','whatsapp-followup-bridge-hosted.js?v=20261001-final1'],
+  ['tm-wa-bridge-hosted','whatsapp-followup-bridge-hosted.js?v=20261001-media-persist1'],
   ['tm-wa-followup-hosted','crm-whatsapp-followup-hosted-adapter.js?v=20261001-final2'],
   ['tm-wa-connections','crm-whatsapp-connections.js?v=20261001-final1']
 ];
