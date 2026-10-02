@@ -6,7 +6,7 @@ window.__TM_WHATSAPP_PRODUCTION_LOADER__=true;
 
 var files=[
   ['tm-wa-runtime','crm-whatsapp-runtime.js?v=20261001-final1'],
-  ['tm-wa-hosted-media-compat','crm-whatsapp-hosted-media-compat.js?v=20261001-media3'],
+  ['tm-wa-hosted-media-compat','crm-whatsapp-hosted-media-compat.js?v=20261001-media4'],
   ['tm-wa-followup','crm-whatsapp-followup-visual.js?v=20261001-final1'],
   ['tm-wa-matching','crm-whatsapp-matching-visual.js?v=20261001-final1'],
   ['tm-wa-gpt','crm-whatsapp-gpt-briefing.js?v=20261001-final1'],
