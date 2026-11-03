@@ -31,7 +31,7 @@ function safeId(v){return String(v||'').replace(/[^A-Za-z0-9._-]/g,'_').slice(0,
 function encPath(v){return String(v||'').split('/').map(encodeURIComponent).join('/')}
 function publicId(userId,slot){return `${userId}.${slot}`}
 function key(userId,slot){return `${userId}:${slot}`}
-function createSession(userId,slot){return{userId,slot,sessionId:publicId(userId,slot),authDir:path.join(AUTH_ROOT,userId,slot),mediaDir:path.join(MEDIA_ROOT,userId,slot),sock:null,starting:null,reconnectTimer:null,events:[],seenMessageIds:new Set(),seenMessageOrder:[],state:{phase:'idle',connected:false,qr:null,qrDataUrl:null,user:null,lastError:null,updatedAt:new Date().toISOString()}}}
+function createSession(userId,slot){return{userId,slot,sessionId:publicId(userId,slot),authDir:path.join(AUTH_ROOT,userId,slot),mediaDir:path.join(MEDIA_ROOT,userId,slot),sock:null,starting:null,reconnectTimer:null,events:[],seenMessageIds:new Set(),seenMessageOrder:[],lidPnMap:new Map(),catchupRequested:new Map(),backfill:null,state:{phase:'idle',connected:false,qr:null,qrDataUrl:null,user:null,lastError:null,updatedAt:new Date().toISOString()}}}
 function getSession(userId,slot){slot=cleanSlot(slot);const k=key(userId,slot);if(!sessions.has(k))sessions.set(k,createSession(userId,slot));return sessions.get(k)}
 function patch(s,next){s.state={...s.state,...next,updatedAt:new Date().toISOString()}}
 function statusPayload(s){return{slot:s.slot,sessionId:s.sessionId,phase:s.state.phase,connected:s.state.connected,qrDataUrl:s.state.qrDataUrl,user:s.state.user,lastError:s.state.lastError,eventCount:s.events.length,followupCandidateCount:s.events.filter(e=>e.eligibleForFollowup).length,directPersistence:Boolean(SUPABASE_SERVICE_KEY),updatedAt:s.state.updatedAt}}
@@ -41,10 +41,27 @@ function phoneFromJid(jid){
   const m=String(jid||'').match(/^(\d+)@s\.whatsapp\.net$/);
   return m?m[1]:null
 }
-function phoneFromMessageKey(key={}){
-  // Baileys 6.7.x passou a usar LID como remoteJid em várias conversas 1:1.
-  // O número real pode vir nos aliases PN abaixo. Nunca usar o número interno @lid
-  // como telefone do lead.
+function rememberLidPn(s,lid,pn){
+  const l=String(lid||''),p=String(pn||'');
+  const phone=phoneFromJid(p);
+  if(!s||!l.endsWith('@lid')||!phone)return;
+  s.lidPnMap.set(l,phone)
+}
+function learnKeyMappings(s,key={}){
+  const pairs=[
+    [key.remoteJid,key.remoteJidAlt],
+    [key.remoteJidAlt,key.remoteJid],
+    [key.participant,key.participantAlt],
+    [key.participantAlt,key.participant]
+  ];
+  for(const [a,b] of pairs){
+    if(String(a||'').endsWith('@lid'))rememberLidPn(s,a,b)
+  }
+}
+function phoneFromMessageKey(key={},s=null){
+  // Baileys pode endereçar DMs por LID. Primeiro usamos os aliases PN do próprio
+  // evento; no histórico, caímos no mapa LID↔PN entregue pelo history sync.
+  learnKeyMappings(s,key);
   const candidates=[
     key.remoteJidAlt,
     key.participantAlt,
@@ -56,6 +73,10 @@ function phoneFromMessageKey(key={}){
   for(const jid of candidates){
     const phone=phoneFromJid(jid);
     if(phone)return phone
+  }
+  for(const jid of [key.remoteJid,key.participant]){
+    const mapped=s?.lidPnMap?.get(String(jid||''));
+    if(mapped)return mapped
   }
   return null
 }
@@ -115,7 +136,17 @@ async function persistEventDirect(s,e){
     logger.info({sessionId:e.sessionId,messageId:e.messageId,storagePath},'event/media persisted directly');
   }catch(err){e.persistenceStatus='error';if(e.media){e.media.supabaseStatus='error';e.media.persistError=err?.message||String(err)}logger.warn({err,sessionId:e.sessionId,messageId:e.messageId},'direct persistence failed')}
 }
-async function captureUpsert(s,upsert){const receivedAt=Date.now(),upsertType=upsert?.type||'unknown';for(const msg of upsert?.messages||[]){const jid=msg?.key?.remoteJid||null;if(!jid)continue;const alt=msg?.key?.remoteJidAlt||null;const type=msg?.message?Object.keys(msg.message)[0]||null:null;const msgTs=asEpochMs(msg?.messageTimestamp);const e={sessionId:s.sessionId,slot:s.slot,source:'messages.upsert',upsertType,live:upsertType==='notify',messageId:msg?.key?.id||null,chatJid:jid,chatJidAlt:alt,contactPhone:phoneFromMessageKey(msg?.key)||phoneFromJid(alt)||null,fromMe:Boolean(msg?.key?.fromMe),direction:msg?.key?.fromMe?'outbound':'inbound',messageTimestampMs:msgTs,receivedAtMs:receivedAt,hasMessage:Boolean(msg?.message),messageType:type,messageText:messageText(msg?.message,type),media:null,persistenceStatus:'pending',backfillEligible:upsertType==='append'&&Boolean(s.backfill?.enabled)&&Boolean(msgTs)&&msgTs>=Number(s.backfill?.cutoffMs||0)};const c=classify(e);e.eligibleForFollowup=c.eligible;e.ignoreReason=c.reason;e.dedupeKey=`${s.sessionId}:${e.messageId||'sem-id'}`;if(!pushEvent(s,e))continue;if(e.eligibleForFollowup&&MEDIA_TYPES[type])await captureMedia(s,msg,e);if(e.eligibleForFollowup&&SUPABASE_SERVICE_KEY)await persistEventDirect(s,e)}}
+async function captureUpsert(s,upsert){const receivedAt=Date.now(),upsertType=upsert?.type||'unknown';for(const msg of upsert?.messages||[]){const jid=msg?.key?.remoteJid||null;if(!jid)continue;const alt=msg?.key?.remoteJidAlt||null;const type=msg?.message?Object.keys(msg.message)[0]||null:null;const msgTs=asEpochMs(msg?.messageTimestamp);const e={sessionId:s.sessionId,slot:s.slot,source:'messages.upsert',upsertType,live:upsertType==='notify',messageId:msg?.key?.id||null,chatJid:jid,chatJidAlt:alt,contactPhone:phoneFromMessageKey(msg?.key,s)||phoneFromJid(alt)||null,fromMe:Boolean(msg?.key?.fromMe),direction:msg?.key?.fromMe?'outbound':'inbound',messageTimestampMs:msgTs,receivedAtMs:receivedAt,hasMessage:Boolean(msg?.message),messageType:type,messageText:messageText(msg?.message,type),media:null,persistenceStatus:'pending',backfillEligible:upsertType==='append'&&Boolean(s.backfill?.enabled)&&Boolean(msgTs)&&msgTs>=Number(s.backfill?.cutoffMs||0)};const c=classify(e);e.eligibleForFollowup=c.eligible;e.ignoreReason=c.reason;e.dedupeKey=`${s.sessionId}:${e.messageId||'sem-id'}`;if(!pushEvent(s,e))continue;if(e.eligibleForFollowup&&MEDIA_TYPES[type])await captureMedia(s,msg,e);if(e.eligibleForFollowup&&SUPABASE_SERVICE_KEY)await persistEventDirect(s,e);
+if(upsertType==='notify'&&msgTs&&s.backfill?.latestMs&&Date.now()-s.backfill.latestMs>15*60*1000){
+  const chatKey=String(jid);
+  const lastReq=s.catchupRequested.get(chatKey)||0;
+  if(Date.now()-lastReq>6*60*60*1000&&typeof s.sock?.fetchMessageHistory==='function'){
+    s.catchupRequested.set(chatKey,Date.now());
+    s.sock.fetchMessageHistory(50,msg.key,msg.messageTimestamp).then(requestId=>{
+      logger.warn({sessionId:s.sessionId,chatJid:chatKey,requestId},'on-demand WhatsApp catch-up requested')
+    }).catch(err=>logger.warn({err,sessionId:s.sessionId,chatJid:chatKey},'on-demand WhatsApp catch-up failed'))
+  }
+}}
 async function connect(s){if(s.starting)return s.starting;if(s.sock&&s.state.connected)return statusPayload(s);s.starting=(async()=>{patch(s,{phase:'starting',connected:false,lastError:null});await fs.mkdir(s.authDir,{recursive:true});const{state:auth,saveCreds}=await useMultiFileAuthState(s.authDir);s.backfill=await backfillPlan(s);const sock=makeWASocket({
   auth,
   browser:Browsers.windows('Desktop'),
@@ -123,7 +154,7 @@ async function connect(s){if(s.starting)return s.starting;if(s.sock&&s.state.con
   // do histórico do WhatsApp a cada reconexão. Isso também evita o aviso recorrente
   // de "sincronizando" no celular.
   syncFullHistory:Boolean(s.backfill?.enabled),
-  shouldSyncHistoryMessage:()=>Boolean(s.backfill?.enabled),
+  shouldSyncHistoryMessage:()=>true,
   fireInitQueries:Boolean(s.backfill?.enabled),
   markOnlineOnConnect:false,
   printQRInTerminal:false,
@@ -136,18 +167,21 @@ async function connect(s){if(s.starting)return s.starting;if(s.sock&&s.state.con
   },
   logger
 });s.sock=sock;sock.ev.on('creds.update',saveCreds);sock.ev.on('messages.upsert',u=>captureUpsert(s,u).catch(err=>logger.warn({err,sessionId:s.sessionId},'message capture failed')));
-if(s.backfill?.enabled){
-  sock.ev.on('messaging-history.set',h=>{
-    const msgs=Array.isArray(h?.messages)?h.messages:[];
-    captureUpsert(s,{type:'append',messages:msgs}).then(()=>{
-      logger.warn({sessionId:s.sessionId,count:msgs.length,cutoffMs:s.backfill?.cutoffMs,isLatest:Boolean(h?.isLatest),progress:h?.progress||null},'WhatsApp backfill batch processed');
-      if(h?.isLatest===true||Number(h?.progress||0)>=100){
-        s.backfill={...(s.backfill||{}),enabled:false,completedAt:Date.now()};
-        patch(s,{phase:'connected'})
-      }
-    }).catch(err=>logger.warn({err,sessionId:s.sessionId},'history backfill failed'))
-  })
-}
+sock.ev.on('messaging-history.set',h=>{
+  for(const m of Array.isArray(h?.lidPnMappings)?h.lidPnMappings:[])rememberLidPn(s,m?.lid,m?.pn);
+  for(const ct of Array.isArray(h?.contacts)?h.contacts:[]){
+    if(String(ct?.id||'').endsWith('@lid'))rememberLidPn(s,ct.id,ct.phoneNumber);
+    if(String(ct?.lid||'').endsWith('@lid'))rememberLidPn(s,ct.lid,ct.phoneNumber||ct.id)
+  }
+  const msgs=Array.isArray(h?.messages)?h.messages:[];
+  captureUpsert(s,{type:'append',messages:msgs}).then(()=>{
+    logger.warn({sessionId:s.sessionId,count:msgs.length,mappings:s.lidPnMap.size,cutoffMs:s.backfill?.cutoffMs,isLatest:Boolean(h?.isLatest),progress:h?.progress||null,syncType:h?.syncType||null},'WhatsApp history batch processed');
+    if(s.backfill?.enabled&&(h?.isLatest===true||Number(h?.progress||0)>=100)){
+      s.backfill={...(s.backfill||{}),enabled:false,completedAt:Date.now()};
+      patch(s,{phase:'connected'})
+    }
+  }).catch(err=>logger.warn({err,sessionId:s.sessionId},'history backfill failed'))
+})
 sock.ev.on('connection.update',async u=>{const{connection,qr,lastDisconnect}=u;if(qr){let qrDataUrl=null;try{qrDataUrl=await QRCode.toDataURL(qr,{margin:2,width:320,errorCorrectionLevel:'M'})}catch{}patch(s,{phase:'qr',connected:false,qrDataUrl,lastError:null})}if(connection==='open'){if(s.reconnectTimer)clearTimeout(s.reconnectTimer);s.reconnectTimer=null;patch(s,{phase:s.backfill?.enabled?'backfilling':'connected',connected:true,qrDataUrl:null,user:sock.user?{id:sock.user.id||null,name:sock.user.name||null}:null,lastError:null})}if(connection==='close'){const code=lastDisconnect?.error?.output?.statusCode;const loggedOut=code===DisconnectReason.loggedOut;patch(s,{phase:loggedOut?'logged_out':'disconnected',connected:false,qrDataUrl:null,lastError:lastDisconnect?.error?.message||String(lastDisconnect?.error||'connection closed')});s.sock=null;if(!loggedOut&&!s.reconnectTimer){s.reconnectTimer=setTimeout(()=>{s.reconnectTimer=null;connect(s).catch(err=>patch(s,{phase:'error',lastError:err.message||String(err)}))},1800)}}});return statusPayload(s)})();try{return await s.starting}catch(err){patch(s,{phase:'error',connected:false,lastError:err.message||String(err)});throw err}finally{s.starting=null}}
 async function authenticate(req){if(!SUPABASE_URL||!SUPABASE_KEY)throw Object.assign(new Error('gateway sem configuração Supabase'),{status:503});const auth=req.headers.authorization||'';if(!auth.startsWith('Bearer '))throw Object.assign(new Error('não autenticado'),{status:401});const r=await fetch(`${SUPABASE_URL}/auth/v1/user`,{headers:{apikey:SUPABASE_KEY,Authorization:auth}});if(!r.ok)throw Object.assign(new Error('sessão Taurus inválida'),{status:401});const u=await r.json();if(!u?.id)throw Object.assign(new Error('usuário inválido'),{status:401});return u}
 async function authMw(req,res,next){try{req.taurusUser=await authenticate(req);next()}catch(err){res.status(err.status||401).json({ok:false,error:err.message||String(err)})}}
