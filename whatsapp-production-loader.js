@@ -10,15 +10,16 @@ var files=[
   ['tm-wa-followup','crm-whatsapp-followup-visual.js?v=20261001-final1'],
   ['tm-wa-matching','crm-whatsapp-matching-visual.js?v=20261001-final1'],
   ['tm-wa-gpt','crm-whatsapp-gpt-briefing.js?v=20261001-final1'],
-  ['tm-wa-history-range','crm-whatsapp-history-range.js?v=20261001-final1'],
+  ['tm-wa-history-range','crm-whatsapp-history-range.js?v=20261103-chat2'],
   ['tm-wa-archive','crm-whatsapp-archive-ui.js?v=20261001-final1'],
   ['tm-wa-storage','crm-whatsapp-storage-gate.js?v=20261001-final1'],
-  ['tm-wa-media','crm-whatsapp-media-preview.js?v=20261001-final1'],
+  ['tm-wa-media','crm-whatsapp-media-preview.js?v=20261103-chat2'],
   ['tm-wa-archive-hotfix','crm-whatsapp-archive-hotfix.js?v=20261001-final1'],
   ['tm-wa-ai-direct','crm-whatsapp-ai-direct.js?v=20261001-final1'],
-  ['tm-wa-bridge-hosted','whatsapp-followup-bridge-hosted.js?v=20261001-media-persist1'],
+  ['tm-wa-bridge-hosted','whatsapp-followup-bridge-hosted.js?v=20261103-live2'],
+  ['tm-wa-live-notifications','crm-whatsapp-live-notifications.js?v=20261103-live2'],
   ['tm-wa-followup-hosted','crm-whatsapp-followup-hosted-adapter.js?v=20261001-final2'],
-  ['tm-wa-connections','crm-whatsapp-connections.js?v=20261103-backfill1']
+  ['tm-wa-connections','crm-whatsapp-connections.js?v=20261103-backfill2']
 ];
 
 function load(id,src){
