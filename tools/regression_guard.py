@@ -67,6 +67,13 @@ require(wa_media_compat, 'isLegacyMedia', 'legacy media source translated')
 require(wa_media_compat, '/api/whatsapp/media/', 'hosted media endpoint used')
 require(wa_media_compat, 'getLeadAssets', 'stored media hydration preserved')
 
+# WhatsApp QR/backfill isolation invariants
+wa_gateway = require_file("services/whatsapp-gateway/server.mjs")
+require(wa_gateway, "const isRegistered=Boolean(auth?.creds?.registered)", "WhatsApp pairing registration gate preserved", 1)
+require(wa_gateway, "syncFullHistory:isRegistered&&Boolean(s.backfill?.enabled)", "history sync disabled during QR pairing", 1)
+require(wa_gateway, "shouldSyncHistoryMessage:()=>isRegistered&&Boolean(s.backfill?.enabled)", "history message sync gated behind registration", 1)
+require(wa_gateway, "fireInitQueries:isRegistered&&Boolean(s.backfill?.enabled)", "init queries disabled during QR pairing", 1)
+
 if errors:
     print("REGRESSION GUARD: FAIL")
     for e in errors:
