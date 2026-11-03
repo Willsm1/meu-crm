@@ -95,9 +95,9 @@ async function connect(s){if(s.starting)return s.starting;if(s.sock&&s.state.con
   // O CRM precisa de eventos novos em tempo real, não de ressincronização retroativa
   // do histórico do WhatsApp a cada reconexão. Isso também evita o aviso recorrente
   // de "sincronizando" no celular.
-  syncFullHistory:false,
-  shouldSyncHistoryMessage:()=>false,
-  fireInitQueries:false,
+  syncFullHistory:true,
+  shouldSyncHistoryMessage:()=>true,
+  fireInitQueries:true,
   markOnlineOnConnect:false,
   printQRInTerminal:false,
   // Grupos, Status e newsletters nunca são candidatos a follow-up no Taurus.
