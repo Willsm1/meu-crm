@@ -10,6 +10,10 @@ function extFor(mime,kind){var m=String(mime||'').toLowerCase();if(m.includes('j
 function authHeaders(extra){var c=cfg(),t=window.TM_WA_RUNTIME&&window.TM_WA_RUNTIME.token&&window.TM_WA_RUNTIME.token();if(!c||!t)throw new Error('Sessão Supabase ausente');return Object.assign({'apikey':c.publishableKey,'Authorization':'Bearer '+t},extra||{});}
 async function candidates(){if(!window.TM_WA_RUNTIME)throw new Error('Runtime WhatsApp indisponível');return window.TM_WA_RUNTIME.api('/api/whatsapp/followup/candidates?limit=500');}
 var persistedMedia=new Set();
+var liveSeen=new Set(),liveSeenOrder=[],livePrimed=false;
+function liveKey(e){return String(e&&e.sessionId||'')+':'+String(e&&e.messageId||'')}
+function rememberLive(e){var k=liveKey(e);if(!k||k===':')return; if(liveSeen.has(k))return;liveSeen.add(k);liveSeenOrder.push(k);if(liveSeenOrder.length>1200){var old=liveSeenOrder.splice(0,liveSeenOrder.length-1000);old.forEach(function(x){liveSeen.delete(x)})}}
+function notifyLive(e,leadId){try{document.dispatchEvent(new CustomEvent('tm:whatsapp-live-message',{detail:{leadId:leadId||null,sessionId:e.sessionId,messageId:e.messageId,direction:e.direction,contactPhone:e.contactPhone,messageType:e.messageType,messageText:e.messageText,messageTimestampMs:e.messageTimestampMs||e.receivedAtMs||Date.now()}}))}catch(_e){}}
 async function mediaAlreadyStored(leadId,e){var k=String(e.sessionId)+':'+String(e.messageId);if(persistedMedia.has(k))return true;try{var rows=await rpc('whatsapp_media_for_lead',{p_lead_id:leadId});var found=(Array.isArray(rows)?rows:[]).some(function(a){return String(a.session_id)+':'+String(a.message_id)===k;});if(found)persistedMedia.add(k);return found;}catch(_e){return false;}}
 async function persistMedia(leadId,e){
   if(!leadId||!e||!e.media||e.media.status!=='stored_gateway'||!e.slot||!e.messageId)return false;
@@ -29,17 +33,21 @@ async function persistMedia(leadId,e){
   persistedMedia.add(k);return true;
 }
 async function syncOnce(){
-  var j=await candidates(),rows=Array.isArray(j.candidates)?j.candidates:[],stats={matched:0,ambiguous:0,notFound:0,errors:0,mediaStored:0,mediaErrors:0,total:rows.length};
+  var j=await candidates(),rows=Array.isArray(j.candidates)?j.candidates:[],stats={matched:0,ambiguous:0,notFound:0,errors:0,mediaStored:0,mediaErrors:0,total:rows.length,liveInbound:0};
+  if(!livePrimed){rows.forEach(rememberLive);livePrimed=true;}
   for(var i=0;i<rows.length;i++){
     var e=rows[i];if(!e.contactPhone||!e.messageId)continue;
+    var unseenLive=livePrimed&&e.live===true&&e.direction==='inbound'&&!liveSeen.has(liveKey(e));
     try{
       var out=await rpc('whatsapp_ingest_event',{p_session_id:e.sessionId,p_message_id:e.messageId,p_direction:e.direction,p_contact_phone:e.contactPhone,p_message_type:e.messageType||null,p_message_text:e.messageText||null,p_message_timestamp:new Date(e.messageTimestampMs||e.receivedAtMs||Date.now()).toISOString()});
       var x=Array.isArray(out)?out[0]:out;
       if(x&&x.status==='matched'){
         stats.matched++;
         if(e.media&&e.media.status==='stored_gateway')try{if(await persistMedia(x.lead_id,e))stats.mediaStored++;}catch(mediaErr){stats.mediaErrors++;try{console.warn('[Taurus WA media persist]',e.messageId,mediaErr);}catch(_e){}}
+        if(unseenLive){stats.liveInbound++;notifyLive(e,x.lead_id);}
       }else if(x&&x.status==='ambiguous')stats.ambiguous++;else if(x&&x.status==='not_found')stats.notFound++;
     }catch(err){stats.errors++;}
+    rememberLive(e);
   }
   try{document.dispatchEvent(new CustomEvent('tm:whatsapp-sync',{detail:stats}));}catch(_e){}return stats;
 }
