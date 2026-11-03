@@ -41,6 +41,8 @@ require_file("followup-agendar-ui.js")
 require_file("followup-schedule-ui.js")
 require_file("notifications-ui.js")
 require_file("crm-whatsapp-runtime.js")
+require_file("tools/whatsapp_conversation_harness.html")
+require_file("crm-whatsapp-live-notifications.js")
 require_file("crm-whatsapp-connections.js")
 require_file("whatsapp-followup-bridge-hosted.js")
 require_file("crm-whatsapp-followup-hosted-adapter.js")
@@ -118,3 +120,7 @@ if errors:
     sys.exit(1)
 
 print("REGRESSION GUARD: PASS")
+
+require(load("crm-whatsapp-history-range.js"), "tm-wa-chat-shell", "WhatsApp-like chat visual")
+require(load("crm-whatsapp-history-range.js"), "TM_WA_HISTORY_UI", "WhatsApp conversation UI API")
+require(load("whatsapp-followup-bridge-hosted.js"), "tm:whatsapp-live-message", "persisted live inbound event dispatch")
