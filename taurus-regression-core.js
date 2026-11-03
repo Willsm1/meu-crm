@@ -6,7 +6,7 @@ if(window.TAURUS_REGRESSION)return;
 const cells=new Map();
 const tests=[];
 const runtimeErrors=[];
-const VERSION='2026-11-03.7';
+const VERSION='2026-11-03.8';
 
 function now(){return Date.now()}
 function makeRunId(){
@@ -331,7 +331,7 @@ registerTest('followup',{id:'view-readable',label:'View v_followup legível no S
 /* Supabase */
 registerTest('supabase',{id:'config',label:'Configuração Supabase presente',source:'CRM_SUPABASE.config',run:({assert})=>{const c=window.CRM_SUPABASE&&window.CRM_SUPABASE.config;assert(c&&c.url&&c.projectRef&&c.schema,'configuração Supabase incompleta');return {details:c.projectRef+' · schema '+c.schema}}});
 registerTest('supabase',{id:'auth-client',label:'Canal autenticado Supabase disponível',run:async({assert})=>{const token=browserSessionToken();let client=false;try{client=!!(await waitSupabaseClient(800))}catch(_e){}assert(client||!!token,'cliente e sessão REST indisponíveis');return {details:client?'cliente Supabase pronto':'fallback REST autenticado pronto'}}});
-registerTest('supabase',{id:'session',label:'Sessão Supabase válida',run:async({assert})=>{const c=await waitSupabaseClient();assert(c&&c.auth,'cliente auth ausente');const out=await c.auth.getSession();if(out.error)throw out.error;assert(out.data&&out.data.session&&out.data.session.user,'sessão ausente');return {details:'user '+out.data.session.user.id}}});
+registerTest('supabase',{id:'session',label:'Sessão Supabase válida',run:async({assert})=>{const u=await authenticatedUser();assert(!!(u&&u.id),'usuário autenticado ausente');return {details:'user '+u.id}}});
 registerTest('supabase',{id:'leads-read',label:'Tabela leads legível',source:'crm.leads',run:async({supaRead})=>({details:'leitura ok · '+(await supaRead('leads','id')).length+' amostra(s)'})});
 registerTest('supabase',{id:'interactions-read',label:'Tabela interactions legível',source:'crm.interactions',run:async({supaRead})=>({details:'leitura ok · '+(await supaRead('interactions','id')).length+' amostra(s)'})});
 registerTest('supabase',{id:'regression-runs-read',label:'Canal de relatórios legível',source:'crm.regression_runs',run:async({supaRead})=>({details:'leitura ok · '+(await supaRead('regression_runs','id')).length+' amostra(s)'})});
