@@ -33,6 +33,22 @@ function loadWhatsAppProduction(){
   s.dataset.tmWhatsappProduction='1';
   document.head.appendChild(s);
 }
+function loadRegressionPanel(){
+  if(document.querySelector('script[data-tm-regression-core]'))return;
+  var core=document.createElement('script');
+  core.src='taurus-regression-core.js?v=20261103-1';
+  core.async=false;
+  core.dataset.tmRegressionCore='1';
+  core.onload=function(){
+    if(document.querySelector('script[data-tm-regression-panel]'))return;
+    var panel=document.createElement('script');
+    panel.src='taurus-regression-panel.js?v=20261103-1';
+    panel.async=false;
+    panel.dataset.tmRegressionPanel='1';
+    document.head.appendChild(panel);
+  };
+  document.head.appendChild(core);
+}
 function boot(){
   var s=document.createElement('style');s.id='tm-actionbar-context-style';s.textContent='#sync-status{display:none!important}';document.head.appendChild(s);
   sync();
@@ -41,6 +57,7 @@ function boot(){
   window.addEventListener('focus',sync);
   var n=0,t=setInterval(function(){sync();if(++n>=30)clearInterval(t);},100);
   loadWhatsAppProduction();
+  loadRegressionPanel();
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
