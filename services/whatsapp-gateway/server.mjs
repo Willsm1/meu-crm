@@ -61,11 +61,38 @@ function phoneFromMessageKey(key={}){
 }
 function messageText(message,type){if(!message||!type)return null;try{if(type==='conversation')return String(message.conversation||'').trim()||null;if(type==='extendedTextMessage')return String(message.extendedTextMessage?.text||'').trim()||null;if(type==='imageMessage')return String(message.imageMessage?.caption||'').trim()||'[imagem]';if(type==='videoMessage')return String(message.videoMessage?.caption||'').trim()||'[vídeo]';if(type==='audioMessage')return'[áudio]';if(type==='stickerMessage')return'[figurinha]';if(type==='documentMessage')return String(message.documentMessage?.fileName||message.documentMessage?.caption||'[documento]').trim();if(type==='contactMessage')return'[contato]';if(type==='contactsArrayMessage')return'[contatos]';if(type==='locationMessage'||type==='liveLocationMessage')return'[localização]'}catch{}return null}
 function extFor(mime,kind){const m=String(mime||'').toLowerCase();if(m.includes('jpeg'))return'jpg';if(m.includes('png'))return'png';if(m.includes('webp'))return'webp';if(m.includes('gif'))return'gif';if(m.includes('ogg'))return'ogg';if(m.includes('opus'))return'opus';if(m.includes('mpeg'))return'mp3';if(m.includes('aac'))return'aac';if(m.includes('wav'))return'wav';if(m.includes('webm'))return'webm';if(m.includes('quicktime'))return'mov';if(m.includes('mp4'))return'mp4';if(m.includes('pdf'))return'pdf';if(m.includes('word'))return'docx';return kind==='audio'?'bin':kind==='image'?'img':kind==='video'?'vid':'bin'}
-function classify(e){if(!e.hasMessage)return{eligible:false,reason:'sem_payload'};const jid=String(e.chatJid||'');if(jid.endsWith('@g.us'))return{eligible:false,reason:'grupo'};if(jid==='status@broadcast'||jid.endsWith('@broadcast'))return{eligible:false,reason:'broadcast_status'};if(!FOLLOWUP_TYPES.has(e.messageType))return{eligible:false,reason:'tipo_tecnico_ou_nao_relevante'};if(e.upsertType==='notify')return{eligible:true,reason:null};const ageMs=Math.abs(Number(e.receivedAtMs||Date.now())-Number(e.messageTimestampMs||0));if(e.upsertType==='append'&&e.messageTimestampMs&&ageMs<=86400000)return{eligible:true,reason:null,historyBackfill:true};return{eligible:false,reason:'historico_ou_sync'}}
+function classify(e){if(!e.hasMessage)return{eligible:false,reason:'sem_payload'};const jid=String(e.chatJid||'');if(jid.endsWith('@g.us'))return{eligible:false,reason:'grupo'};if(jid==='status@broadcast'||jid.endsWith('@broadcast'))return{eligible:false,reason:'broadcast_status'};if(!FOLLOWUP_TYPES.has(e.messageType))return{eligible:false,reason:'tipo_tecnico_ou_nao_relevante'};if(e.upsertType==='notify')return{eligible:true,reason:null};const ageMs=Math.abs(Number(e.receivedAtMs||Date.now())-Number(e.messageTimestampMs||0));if(e.upsertType==='append'&&e.messageTimestampMs&&e.backfillEligible===true)return{eligible:true,reason:null,historyBackfill:true};return{eligible:false,reason:'historico_ou_sync'}}
 function pushEvent(s,e){const mid=String(e?.messageId||'');if(mid&&s.seenMessageIds.has(mid))return false;if(mid){s.seenMessageIds.add(mid);s.seenMessageOrder.push(mid);const seenCap=Math.max(1000,MAX_EVENTS*4);if(s.seenMessageOrder.length>seenCap){const old=s.seenMessageOrder.splice(0,s.seenMessageOrder.length-seenCap);for(const id of old)s.seenMessageIds.delete(id)}}s.events.push(e);if(s.events.length>MAX_EVENTS)s.events.splice(0,s.events.length-MAX_EVENTS);return true}
 async function captureMedia(s,msg,e){const spec=MEDIA_TYPES[e.messageType];if(!spec||!e.eligibleForFollowup||!e.messageId)return;const node=msg.message?.[e.messageType];if(!node)return;const meta={kind:spec.kind,mimeType:node.mimetype||null,fileName:node.fileName||null,durationSeconds:Number(node.seconds||0)||null,caption:node.caption||null,status:'downloading',byteSize:null,error:null,supabaseStatus:'pending',persistError:null,storagePath:null};e.media=meta;try{const chunks=[];let total=0;const stream=await downloadContentFromMessage(node,spec.stream);for await(const chunk of stream){const b=Buffer.from(chunk);total+=b.length;if(total>MAX_MEDIA_BYTES)throw new Error('mídia excede limite do gateway');chunks.push(b)}const buf=Buffer.concat(chunks);await fs.mkdir(s.mediaDir,{recursive:true});const file=`${safeId(e.messageId)}.${extFor(meta.mimeType,spec.kind)}`;await fs.writeFile(path.join(s.mediaDir,file),buf);Object.assign(meta,{status:'stored_gateway',byteSize:buf.length,file})}catch(err){Object.assign(meta,{status:'failed',supabaseStatus:'capture_failed',error:err?.message||String(err)});logger.warn({err,sessionId:s.sessionId,messageId:e.messageId},'media capture failed')}}
 function serviceHeaders(extra={}){return{apikey:SUPABASE_SERVICE_KEY,Authorization:`Bearer ${SUPABASE_SERVICE_KEY}`,'Content-Type':'application/json','Accept-Profile':'crm','Content-Profile':'crm',...extra}}
 async function rpcAsService(name,args={}){if(!SUPABASE_SERVICE_KEY)throw new Error('service role ausente');const r=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{method:'POST',headers:serviceHeaders(),body:JSON.stringify(args)});const text=await r.text();if(!r.ok)throw new Error(`${name} ${r.status}: ${text.slice(0,240)}`);try{return text?JSON.parse(text):null}catch{return text}}
+async function latestPersistedMessageMs(sessionId){
+  if(!SUPABASE_SERVICE_KEY)return null;
+  try{
+    const q=new URLSearchParams({
+      select:'message_timestamp',
+      session_id:'eq.'+sessionId,
+      order:'message_timestamp.desc',
+      limit:'1'
+    });
+    const r=await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_conversation_events?${q.toString()}`,{
+      headers:serviceHeaders()
+    });
+    if(!r.ok)return null;
+    const rows=await r.json();
+    const ts=rows?.[0]?.message_timestamp;
+    const ms=ts?Date.parse(ts):NaN;
+    return Number.isFinite(ms)?ms:null;
+  }catch{return null}
+}
+async function backfillPlan(s){
+  const latest=await latestPersistedMessageMs(s.sessionId);
+  const now=Date.now();
+  const floor=now-7*24*60*60*1000;
+  const cutoff=Math.max(floor,(latest||floor)-12*60*60*1000);
+  const gap=latest?now-latest:7*24*60*60*1000;
+  return{enabled:gap>15*60*1000,cutoffMs:cutoff,latestMs:latest}
+}
 async function uploadAsService(storagePath,buf,mime){if(!SUPABASE_SERVICE_KEY)throw new Error('service role ausente');const r=await fetch(`${SUPABASE_URL}/storage/v1/object/whatsapp-media/${encPath(storagePath)}`,{method:'POST',headers:{apikey:SUPABASE_SERVICE_KEY,Authorization:`Bearer ${SUPABASE_SERVICE_KEY}`,'Content-Type':mime||'application/octet-stream','x-upsert':'true'},body:buf});const text=await r.text();if(!r.ok)throw new Error(`storage ${r.status}: ${text.slice(0,240)}`);return text}
 async function persistEventDirect(s,e){
   if(!SUPABASE_SERVICE_KEY||!e?.eligibleForFollowup||!e.messageId||!e.contactPhone)return;
@@ -88,16 +115,16 @@ async function persistEventDirect(s,e){
     logger.info({sessionId:e.sessionId,messageId:e.messageId,storagePath},'event/media persisted directly');
   }catch(err){e.persistenceStatus='error';if(e.media){e.media.supabaseStatus='error';e.media.persistError=err?.message||String(err)}logger.warn({err,sessionId:e.sessionId,messageId:e.messageId},'direct persistence failed')}
 }
-async function captureUpsert(s,upsert){const receivedAt=Date.now(),upsertType=upsert?.type||'unknown';for(const msg of upsert?.messages||[]){const jid=msg?.key?.remoteJid||null;if(!jid)continue;const alt=msg?.key?.remoteJidAlt||null;const type=msg?.message?Object.keys(msg.message)[0]||null:null;const e={sessionId:s.sessionId,slot:s.slot,source:'messages.upsert',upsertType,live:upsertType==='notify',messageId:msg?.key?.id||null,chatJid:jid,chatJidAlt:alt,contactPhone:phoneFromMessageKey(msg?.key)||phoneFromJid(alt)||null,fromMe:Boolean(msg?.key?.fromMe),direction:msg?.key?.fromMe?'outbound':'inbound',messageTimestampMs:asEpochMs(msg?.messageTimestamp),receivedAtMs:receivedAt,hasMessage:Boolean(msg?.message),messageType:type,messageText:messageText(msg?.message,type),media:null,persistenceStatus:'pending'};const c=classify(e);e.eligibleForFollowup=c.eligible;e.ignoreReason=c.reason;e.dedupeKey=`${s.sessionId}:${e.messageId||'sem-id'}`;if(!pushEvent(s,e))continue;if(e.eligibleForFollowup&&MEDIA_TYPES[type])await captureMedia(s,msg,e);if(e.eligibleForFollowup&&SUPABASE_SERVICE_KEY)await persistEventDirect(s,e)}}
-async function connect(s){if(s.starting)return s.starting;if(s.sock&&s.state.connected)return statusPayload(s);s.starting=(async()=>{patch(s,{phase:'starting',connected:false,lastError:null});await fs.mkdir(s.authDir,{recursive:true});const{state:auth,saveCreds}=await useMultiFileAuthState(s.authDir);const sock=makeWASocket({
+async function captureUpsert(s,upsert){const receivedAt=Date.now(),upsertType=upsert?.type||'unknown';for(const msg of upsert?.messages||[]){const jid=msg?.key?.remoteJid||null;if(!jid)continue;const alt=msg?.key?.remoteJidAlt||null;const type=msg?.message?Object.keys(msg.message)[0]||null:null;const msgTs=asEpochMs(msg?.messageTimestamp);const e={sessionId:s.sessionId,slot:s.slot,source:'messages.upsert',upsertType,live:upsertType==='notify',messageId:msg?.key?.id||null,chatJid:jid,chatJidAlt:alt,contactPhone:phoneFromMessageKey(msg?.key)||phoneFromJid(alt)||null,fromMe:Boolean(msg?.key?.fromMe),direction:msg?.key?.fromMe?'outbound':'inbound',messageTimestampMs:msgTs,receivedAtMs:receivedAt,hasMessage:Boolean(msg?.message),messageType:type,messageText:messageText(msg?.message,type),media:null,persistenceStatus:'pending',backfillEligible:upsertType==='append'&&Boolean(s.backfill?.enabled)&&Boolean(msgTs)&&msgTs>=Number(s.backfill?.cutoffMs||0)};const c=classify(e);e.eligibleForFollowup=c.eligible;e.ignoreReason=c.reason;e.dedupeKey=`${s.sessionId}:${e.messageId||'sem-id'}`;if(!pushEvent(s,e))continue;if(e.eligibleForFollowup&&MEDIA_TYPES[type])await captureMedia(s,msg,e);if(e.eligibleForFollowup&&SUPABASE_SERVICE_KEY)await persistEventDirect(s,e)}}
+async function connect(s){if(s.starting)return s.starting;if(s.sock&&s.state.connected)return statusPayload(s);s.starting=(async()=>{patch(s,{phase:'starting',connected:false,lastError:null});await fs.mkdir(s.authDir,{recursive:true});const{state:auth,saveCreds}=await useMultiFileAuthState(s.authDir);s.backfill=await backfillPlan(s);const sock=makeWASocket({
   auth,
   browser:Browsers.windows('Desktop'),
   // O CRM precisa de eventos novos em tempo real, não de ressincronização retroativa
   // do histórico do WhatsApp a cada reconexão. Isso também evita o aviso recorrente
   // de "sincronizando" no celular.
-  syncFullHistory:true,
-  shouldSyncHistoryMessage:()=>true,
-  fireInitQueries:true,
+  syncFullHistory:Boolean(s.backfill?.enabled),
+  shouldSyncHistoryMessage:()=>Boolean(s.backfill?.enabled),
+  fireInitQueries:Boolean(s.backfill?.enabled),
   markOnlineOnConnect:false,
   printQRInTerminal:false,
   // Grupos, Status e newsletters nunca são candidatos a follow-up no Taurus.
@@ -108,7 +135,16 @@ async function connect(s){if(s.starting)return s.starting;if(s.sock&&s.state.con
     return j==='status@broadcast'||j.endsWith('@broadcast')||j.endsWith('@g.us')||j.endsWith('@newsletter');
   },
   logger
-});s.sock=sock;sock.ev.on('creds.update',saveCreds);sock.ev.on('messages.upsert',u=>captureUpsert(s,u).catch(err=>logger.warn({err,sessionId:s.sessionId},'message capture failed')));sock.ev.on('connection.update',async u=>{const{connection,qr,lastDisconnect}=u;if(qr){let qrDataUrl=null;try{qrDataUrl=await QRCode.toDataURL(qr,{margin:2,width:320,errorCorrectionLevel:'M'})}catch{}patch(s,{phase:'qr',connected:false,qrDataUrl,lastError:null})}if(connection==='open'){if(s.reconnectTimer)clearTimeout(s.reconnectTimer);s.reconnectTimer=null;patch(s,{phase:'connected',connected:true,qrDataUrl:null,user:sock.user?{id:sock.user.id||null,name:sock.user.name||null}:null,lastError:null})}if(connection==='close'){const code=lastDisconnect?.error?.output?.statusCode;const loggedOut=code===DisconnectReason.loggedOut;patch(s,{phase:loggedOut?'logged_out':'disconnected',connected:false,qrDataUrl:null,lastError:lastDisconnect?.error?.message||String(lastDisconnect?.error||'connection closed')});s.sock=null;if(!loggedOut&&!s.reconnectTimer){s.reconnectTimer=setTimeout(()=>{s.reconnectTimer=null;connect(s).catch(err=>patch(s,{phase:'error',lastError:err.message||String(err)}))},1800)}}});return statusPayload(s)})();try{return await s.starting}catch(err){patch(s,{phase:'error',connected:false,lastError:err.message||String(err)});throw err}finally{s.starting=null}}
+});s.sock=sock;sock.ev.on('creds.update',saveCreds);sock.ev.on('messages.upsert',u=>captureUpsert(s,u).catch(err=>logger.warn({err,sessionId:s.sessionId},'message capture failed')));
+if(s.backfill?.enabled){
+  sock.ev.on('messaging-history.set',h=>{
+    const msgs=Array.isArray(h?.messages)?h.messages:[];
+    captureUpsert(s,{type:'append',messages:msgs}).then(()=>{
+      logger.warn({sessionId:s.sessionId,count:msgs.length,cutoffMs:s.backfill?.cutoffMs},'WhatsApp backfill batch processed')
+    }).catch(err=>logger.warn({err,sessionId:s.sessionId},'history backfill failed'))
+  })
+}
+sock.ev.on('connection.update',async u=>{const{connection,qr,lastDisconnect}=u;if(qr){let qrDataUrl=null;try{qrDataUrl=await QRCode.toDataURL(qr,{margin:2,width:320,errorCorrectionLevel:'M'})}catch{}patch(s,{phase:'qr',connected:false,qrDataUrl,lastError:null})}if(connection==='open'){if(s.reconnectTimer)clearTimeout(s.reconnectTimer);s.reconnectTimer=null;patch(s,{phase:s.backfill?.enabled?'backfilling':'connected',connected:true,qrDataUrl:null,user:sock.user?{id:sock.user.id||null,name:sock.user.name||null}:null,lastError:null})}if(connection==='close'){const code=lastDisconnect?.error?.output?.statusCode;const loggedOut=code===DisconnectReason.loggedOut;patch(s,{phase:loggedOut?'logged_out':'disconnected',connected:false,qrDataUrl:null,lastError:lastDisconnect?.error?.message||String(lastDisconnect?.error||'connection closed')});s.sock=null;if(!loggedOut&&!s.reconnectTimer){s.reconnectTimer=setTimeout(()=>{s.reconnectTimer=null;connect(s).catch(err=>patch(s,{phase:'error',lastError:err.message||String(err)}))},1800)}}});return statusPayload(s)})();try{return await s.starting}catch(err){patch(s,{phase:'error',connected:false,lastError:err.message||String(err)});throw err}finally{s.starting=null}}
 async function authenticate(req){if(!SUPABASE_URL||!SUPABASE_KEY)throw Object.assign(new Error('gateway sem configuração Supabase'),{status:503});const auth=req.headers.authorization||'';if(!auth.startsWith('Bearer '))throw Object.assign(new Error('não autenticado'),{status:401});const r=await fetch(`${SUPABASE_URL}/auth/v1/user`,{headers:{apikey:SUPABASE_KEY,Authorization:auth}});if(!r.ok)throw Object.assign(new Error('sessão Taurus inválida'),{status:401});const u=await r.json();if(!u?.id)throw Object.assign(new Error('usuário inválido'),{status:401});return u}
 async function authMw(req,res,next){try{req.taurusUser=await authenticate(req);next()}catch(err){res.status(err.status||401).json({ok:false,error:err.message||String(err)})}}
 function userHeaders(auth,extra={}){return{apikey:SUPABASE_KEY,Authorization:auth,'Content-Type':'application/json','Accept-Profile':'crm','Content-Profile':'crm',...extra}}
