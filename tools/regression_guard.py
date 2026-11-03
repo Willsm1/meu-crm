@@ -77,14 +77,6 @@ require(wa_media_compat, 'isLegacyMedia', 'legacy media source translated')
 require(wa_media_compat, '/api/whatsapp/media/', 'hosted media endpoint used')
 require(wa_media_compat, 'getLeadAssets', 'stored media hydration preserved')
 
-if errors:
-    print("REGRESSION GUARD: FAIL")
-    for e in errors:
-        print(f"- {e}")
-    sys.exit(1)
-
-print("REGRESSION GUARD: PASS")
-
 # WhatsApp gateway behavioral hardening invariants
 require(gateway, "./core.mjs", "gateway tested core import")
 require(gateway, "./media-core.mjs", "gateway tested media core import")
@@ -95,3 +87,11 @@ require(gateway_media_core, "downloadMediaBuffer", "media retry helper covered")
 require(gateway_media_core, "shouldCleanupLocalMedia", "safe media cleanup policy covered")
 require(gateway_package, '"test": "node --test test/*.test.mjs"', "gateway test command")
 forbid(gateway, "oneTimeResetWillSession", "hard-coded production WhatsApp auth reset")
+
+if errors:
+    print("REGRESSION GUARD: FAIL")
+    for e in errors:
+        print(f"- {e}")
+    sys.exit(1)
+
+print("REGRESSION GUARD: PASS")
