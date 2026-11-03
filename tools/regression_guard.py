@@ -82,6 +82,7 @@ require(wa_media_compat, 'getLeadAssets', 'stored media hydration preserved')
 # Taurus anti-regression panel invariants
 require(actionbar, "taurus-regression-core.js?v='+Date.now()", "anti-regression cache busting")
 require(regression_core, "waitSupabaseClient", "Supabase readiness wait in regression runner")
+require(regression_core, "directInsertRegression", "REST fallback for regression report persistence")
 
 require(actionbar, "taurus-regression-core.js", "anti-regression core loader")
 require(actionbar, "taurus-regression-panel.js", "anti-regression panel loader")

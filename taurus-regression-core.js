@@ -6,7 +6,7 @@ if(window.TAURUS_REGRESSION)return;
 const cells=new Map();
 const tests=[];
 const runtimeErrors=[];
-const VERSION='2026-11-03.3';
+const VERSION='2026-11-03.4';
 
 function now(){return Date.now()}
 function safeString(v){try{return typeof v==='string'?v:JSON.stringify(v)}catch(_e){return String(v)}}
@@ -44,6 +44,40 @@ async function waitSupabaseClient(timeoutMs=5000){
   }
   throw new Error('cliente Supabase indisponível após '+timeoutMs+'ms');
 }
+function supabaseConfig(){
+  return window.CRM_SUPABASE&&window.CRM_SUPABASE.config||null;
+}
+function browserSessionToken(){
+  const cfg=supabaseConfig();
+  if(!cfg||!cfg.projectRef)return null;
+  try{
+    const raw=localStorage.getItem('sb-'+cfg.projectRef+'-auth-token');
+    if(!raw)return null;
+    const s=JSON.parse(raw);
+    return s&&(s.access_token||(s.currentSession&&s.currentSession.access_token))||null;
+  }catch(_e){return null}
+}
+async function directInsertRegression(payload){
+  const cfg=supabaseConfig(),token=browserSessionToken();
+  if(!cfg||!cfg.url||!cfg.publishableKey||!token)throw new Error('fallback REST sem configuração/sessão');
+  const r=await fetch(cfg.url+'/rest/v1/regression_runs',{
+    method:'POST',
+    headers:{
+      'apikey':cfg.publishableKey,
+      'Authorization':'Bearer '+token,
+      'Content-Type':'application/json',
+      'Accept-Profile':cfg.schema||'crm',
+      'Content-Profile':cfg.schema||'crm',
+      'Prefer':'return=representation'
+    },
+    body:JSON.stringify(payload)
+  });
+  const text=await r.text();
+  let data=null;try{data=text?JSON.parse(text):null}catch(_e){}
+  if(!r.ok)throw new Error((data&&data.message)||('fallback REST HTTP '+r.status));
+  const row=Array.isArray(data)?data[0]:data;
+  return row||{};
+}
 async function supaRead(table,select='*'){
   const cli=await waitSupabaseClient();
   const q=cli.from(table).select(select).limit(1);
@@ -80,23 +114,30 @@ async function runOne(t,mode){
   }
 }
 async function persist(report){
+  const payload={
+    source:'crm_panel',
+    status:report.failed>0?'failed':(report.skipped>0?'partial':'passed'),
+    passed:report.passed,
+    failed:report.failed,
+    skipped:report.skipped,
+    duration_ms:report.durationMs,
+    app_version:VERSION,
+    results:report.results,
+    context:report.context
+  };
+  let primaryError=null;
   try{
     const cli=await waitSupabaseClient();
-    const payload={
-      source:'crm_panel',
-      status:report.failed>0?'failed':(report.skipped>0?'partial':'passed'),
-      passed:report.passed,
-      failed:report.failed,
-      skipped:report.skipped,
-      duration_ms:report.durationMs,
-      app_version:VERSION,
-      results:report.results,
-      context:report.context
-    };
     const out=await cli.from('regression_runs').insert(payload).select('id,created_at').single();
     if(out.error)throw out.error;
-    return {ok:true,id:out.data.id,createdAt:out.data.created_at};
-  }catch(e){return {ok:false,error:errMsg(e)}}
+    return {ok:true,via:'client',id:out.data.id,createdAt:out.data.created_at};
+  }catch(e){primaryError=errMsg(e)}
+  try{
+    const row=await directInsertRegression(payload);
+    return {ok:true,via:'rest-fallback',id:row.id||null,createdAt:row.created_at||null,primaryError};
+  }catch(e){
+    return {ok:false,error:'client: '+primaryError+' · fallback: '+errMsg(e)};
+  }
 }
 async function runAll(options){
   const o=Object.assign({mode:'safe',cellId:null,onProgress:null,persist:true},options||{});
