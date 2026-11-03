@@ -1,0 +1,32 @@
+name: WhatsApp Gateway Regression
+
+on:
+  push:
+    branches:
+      - 'test/protect-whatsapp-gateway-*'
+      - 'release/taurus-magnum-rc-20261001'
+  pull_request:
+    branches:
+      - 'release/taurus-magnum-rc-20261001'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gateway-regression:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/whatsapp-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install gateway dependencies
+        run: npm install --ignore-scripts
+      - name: Gateway syntax
+        run: node --check server.mjs
+      - name: Gateway unit tests
+        run: npm test
