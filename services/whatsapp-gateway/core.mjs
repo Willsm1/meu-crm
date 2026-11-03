@@ -26,7 +26,7 @@ export function classifyEvent(e){
   if(!FOLLOWUP_TYPES.has(e.messageType))return{eligible:false,reason:'tipo_tecnico_ou_nao_relevante'};
   if(e.upsertType==='notify')return{eligible:true,reason:null};
   const ageMs=Math.abs(Number(e.receivedAtMs||Date.now())-Number(e.messageTimestampMs||0));
-  if(e.upsertType==='append'&&e.fromMe&&e.messageTimestampMs&&ageMs<=180000)return{eligible:true,reason:null,linkedDeviceOutbound:true};
+  if(e.upsertType==='append'&&e.fromMe&&e.messageTimestampMs&&ageMs<=7*24*60*60*1000)return{eligible:true,reason:null,linkedDeviceOutbound:true};
   if(e.upsertType==='append'&&e.messageTimestampMs&&e.backfillEligible===true)return{eligible:true,reason:null,historyBackfill:true};
   return{eligible:false,reason:'historico_ou_sync'};
 }
