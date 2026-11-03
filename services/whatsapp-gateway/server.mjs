@@ -149,7 +149,7 @@ if(upsertType==='notify'&&msgTs&&s.backfill?.latestMs&&Date.now()-s.backfill.lat
       logger.warn({sessionId:s.sessionId,chatJid:chatKey,requestId},'on-demand WhatsApp catch-up requested')
     }).catch(err=>logger.warn({err,sessionId:s.sessionId,chatJid:chatKey},'on-demand WhatsApp catch-up failed'))
   }
-}}
+}}}
 async function connect(s){if(s.starting)return s.starting;if(s.sock&&s.state.connected)return statusPayload(s);s.starting=(async()=>{patch(s,{phase:'starting',connected:false,lastError:null});await fs.mkdir(s.authDir,{recursive:true});const{state:auth,saveCreds}=await useMultiFileAuthState(s.authDir);s.backfill=await backfillPlan(s);s.forceBackfill=false;const sock=makeWASocket({
   auth,
   browser:Browsers.windows('Desktop'),
