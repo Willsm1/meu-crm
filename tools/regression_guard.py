@@ -32,6 +32,8 @@ gateway = require_file("services/whatsapp-gateway/server.mjs")
 gateway_core = require_file("services/whatsapp-gateway/core.mjs")
 gateway_media_core = require_file("services/whatsapp-gateway/media-core.mjs")
 gateway_package = require_file("services/whatsapp-gateway/package.json")
+regression_core = require_file("taurus-regression-core.js")
+regression_panel = require_file("taurus-regression-panel.js")
 require_file("services/whatsapp-gateway/test/core.test.mjs")
 require_file("services/whatsapp-gateway/test/media-core.test.mjs")
 require_file("supabase-canonical.js")
@@ -76,6 +78,17 @@ require(wa_loader, 'crm-whatsapp-connections.js', 'multi-WhatsApp manager loaded
 require(wa_media_compat, 'isLegacyMedia', 'legacy media source translated')
 require(wa_media_compat, '/api/whatsapp/media/', 'hosted media endpoint used')
 require(wa_media_compat, 'getLeadAssets', 'stored media hydration preserved')
+
+# Taurus anti-regression panel invariants
+require(actionbar, "taurus-regression-core.js", "anti-regression core loader")
+require(actionbar, "taurus-regression-panel.js", "anti-regression panel loader")
+require(regression_core, "registerCell", "cell registry API")
+require(regression_core, "registerTest", "test registry API")
+require(regression_core, "regression_runs", "persistent regression reporting")
+require(regression_core, "tm_regression_fixture_", "safe test reset namespace")
+require(regression_panel, "RODAR TODOS OS TESTES", "one-click regression action")
+require(regression_panel, "Rodar célula", "per-cell regression action")
+forbid(regression_core, "localStorage.clear()", "global localStorage reset in regression runner")
 
 # WhatsApp gateway behavioral hardening invariants
 require(gateway, "./core.mjs", "gateway tested core import")
