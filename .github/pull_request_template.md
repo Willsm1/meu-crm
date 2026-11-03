@@ -40,3 +40,10 @@ Para bugfix/alteração de comportamento, registre:
 - [ ] Regression Guard verde.
 - [ ] Staging validado quando aplicável.
 - [ ] Rollback conhecido.
+
+
+### Célula Anti-Regressão
+- [ ] A célula afetada está identificada.
+- [ ] Novos comportamentos registram novos testes em `TAURUS_REGRESSION`.
+- [ ] Limites com outras células têm teste de integração.
+- [ ] O botão Anti-Regressão foi executado e não introduziu falha crítica.
