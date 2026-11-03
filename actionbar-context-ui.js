@@ -36,13 +36,13 @@ function loadWhatsAppProduction(){
 function loadRegressionPanel(){
   if(document.querySelector('script[data-tm-regression-core]'))return;
   var core=document.createElement('script');
-  core.src='taurus-regression-core.js?v=20261103-1';
+  core.src='taurus-regression-core.js?v='+Date.now();
   core.async=false;
   core.dataset.tmRegressionCore='1';
   core.onload=function(){
     if(document.querySelector('script[data-tm-regression-panel]'))return;
     var panel=document.createElement('script');
-    panel.src='taurus-regression-panel.js?v=20261103-1';
+    panel.src='taurus-regression-panel.js?v='+Date.now();
     panel.async=false;
     panel.dataset.tmRegressionPanel='1';
     document.head.appendChild(panel);
