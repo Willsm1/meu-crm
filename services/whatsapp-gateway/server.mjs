@@ -61,6 +61,9 @@ async function persistEventDirect(s,e){
     await uploadAsService(storagePath,buf,e.media.mimeType);
     await rpcAsService('whatsapp_gateway_media_register',{p_user_id:s.userId,p_lead_id:matched.lead_id,p_event_id:null,p_session_id:e.sessionId,p_message_id:e.messageId,p_media_kind:e.media.kind,p_mime_type:e.media.mimeType||'application/octet-stream',p_storage_path:storagePath,p_original_filename:e.media.fileName||null,p_byte_size:buf.length,p_duration_seconds:e.media.durationSeconds||null,p_caption:e.media.caption||null});
     Object.assign(e.media,{supabaseStatus:'stored',persistError:null,storagePath});
+    // A mídia já está no Storage privado do Supabase; a cópia local é apenas cache.
+    // Removê-la evita que o disco persistente do gateway encha e force reconexões do WhatsApp.
+    try{await fs.rm(filePath,{force:true});e.media.file=null}catch(cleanErr){logger.warn({err:cleanErr,sessionId:e.sessionId,messageId:e.messageId},'local media cleanup failed')}
     logger.info({sessionId:e.sessionId,messageId:e.messageId,storagePath},'event/media persisted directly');
   }catch(err){e.persistenceStatus='error';if(e.media){e.media.supabaseStatus='error';e.media.persistError=err?.message||String(err)}logger.warn({err,sessionId:e.sessionId,messageId:e.messageId},'direct persistence failed')}
 }
@@ -100,6 +103,7 @@ async function persistEventMedia(req,s,e){
     await uploadAsUser(auth,storagePath,buf,e.media.mimeType);
     await rpcAsUser(auth,'whatsapp_media_register',{p_lead_id:matched.lead_id,p_event_id:null,p_session_id:e.sessionId,p_message_id:e.messageId,p_media_kind:e.media.kind,p_mime_type:e.media.mimeType||'application/octet-stream',p_storage_path:storagePath,p_original_filename:e.media.fileName||null,p_byte_size:buf.length,p_duration_seconds:e.media.durationSeconds||null,p_caption:e.media.caption||null});
     Object.assign(e.media,{supabaseStatus:'stored',persistError:null,storagePath});
+    try{await fs.rm(filePath,{force:true});e.media.file=null}catch(cleanErr){logger.warn({err:cleanErr,sessionId:e.sessionId,messageId:e.messageId},'local media cleanup failed')}
     logger.info({sessionId:e.sessionId,messageId:e.messageId,storagePath},'media persisted to Supabase');
   }catch(err){e.media.supabaseStatus='error';e.media.persistError=err?.message||String(err);logger.warn({err,sessionId:e.sessionId,messageId:e.messageId},'media Supabase persistence failed')}
 }
@@ -115,6 +119,24 @@ app.delete('/api/whatsapp/sessions/:slot',(req,res)=>{(async()=>{try{const s=get
 app.get('/api/whatsapp/followup/candidates',async(req,res)=>{try{const lim=Math.max(1,Math.min(500,Number(req.query.limit||200))),ss=userSessions(req.taurusUser.id),events=ss.flatMap(s=>s.events.filter(e=>e.eligibleForFollowup).map(e=>({s,e})));events.sort((a,b)=>(b.e.messageTimestampMs||b.e.receivedAtMs||0)-(a.e.messageTimestampMs||a.e.receivedAtMs||0));const selected=events.slice(0,lim);await Promise.allSettled(selected.filter(x=>x.e.media?.status==='stored_gateway'&&x.e.media.supabaseStatus!=='stored').map(x=>persistEventMedia(req,x.s,x.e)));const rows=selected.map(x=>candidateView(x.e));res.json({mode:'hosted',writesEnabled:true,directPersistence:Boolean(SUPABASE_SERVICE_KEY),mediaPersistence:SUPABASE_SERVICE_KEY?'gateway-direct':'gateway-to-supabase-on-read',version:GATEWAY_VERSION,count:events.length,candidates:rows})}catch(err){logger.warn({err},'candidate endpoint failed');res.status(500).json({ok:false,error:err.message||String(err)})}});
 app.get('/api/whatsapp/media/:slot/:messageId',async(req,res)=>{try{const s=getSession(req.taurusUser.id,req.params.slot),mid=safeId(req.params.messageId);const files=await fs.readdir(s.mediaDir).catch(()=>[]);const file=files.find(x=>x===mid||x.startsWith(mid+'.'));if(!file)return res.status(404).json({ok:false,error:'media not found'});res.set('Cache-Control','private, max-age=120');res.sendFile(path.join(s.mediaDir,file))}catch(err){res.status(400).json({ok:false,error:err.message||String(err)})}});
 
-async function restore(){await fs.mkdir(AUTH_ROOT,{recursive:true});await fs.mkdir(MEDIA_ROOT,{recursive:true});const users=await fs.readdir(AUTH_ROOT,{withFileTypes:true}).catch(()=>[]);for(const u of users.filter(x=>x.isDirectory())){const slots=await fs.readdir(path.join(AUTH_ROOT,u.name),{withFileTypes:true}).catch(()=>[]);for(const sl of slots.filter(x=>x.isDirectory())){try{const s=getSession(u.name,sl.name);connect(s).catch(err=>logger.warn({err,sessionId:s.sessionId},'restore failed'))}catch{}}}}
+async function cleanupOldMediaCache(){
+  const cutoff=Date.now()-72*60*60*1000;
+  let removed=0,freed=0;
+  async function walk(dir){
+    const rows=await fs.readdir(dir,{withFileTypes:true}).catch(()=>[]);
+    for(const row of rows){
+      const p=path.join(dir,row.name);
+      if(row.isDirectory()){await walk(p);continue}
+      try{
+        const st=await fs.stat(p);
+        if(st.mtimeMs<cutoff){await fs.rm(p,{force:true});removed++;freed+=Number(st.size||0)}
+      }catch{}
+    }
+  }
+  await fs.mkdir(MEDIA_ROOT,{recursive:true});
+  await walk(MEDIA_ROOT);
+  if(removed)logger.warn({removed,freedBytes:freed},'old local media cache cleaned');
+}
+async function restore(){await fs.mkdir(AUTH_ROOT,{recursive:true});await fs.mkdir(MEDIA_ROOT,{recursive:true});await cleanupOldMediaCache();const users=await fs.readdir(AUTH_ROOT,{withFileTypes:true}).catch(()=>[]);for(const u of users.filter(x=>x.isDirectory())){const slots=await fs.readdir(path.join(AUTH_ROOT,u.name),{withFileTypes:true}).catch(()=>[]);for(const sl of slots.filter(x=>x.isDirectory())){try{const s=getSession(u.name,sl.name);connect(s).catch(err=>logger.warn({err,sessionId:s.sessionId},'restore failed'))}catch{}}}}
 await restore();
 app.listen(PORT,'0.0.0.0',()=>console.log(`[Taurus WhatsApp Gateway] ${GATEWAY_VERSION} listening on 0.0.0.0:${PORT}`));
