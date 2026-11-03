@@ -42,6 +42,11 @@ jobs:
           python3 -m http.server 8766 >/tmp/tm-reg-http.log 2>&1 &
           SERVER=$!
           trap 'kill $SERVER || true' EXIT
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:8766/tools/regression_panel_harness.html >/dev/null; then break; fi
+            sleep 0.1
+          done
+          curl -fsS http://127.0.0.1:8766/tools/regression_panel_harness.html >/dev/null
           CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
           if [ -z "$CHROME" ]; then
             echo "Chrome/Chromium not available on runner"
@@ -60,6 +65,11 @@ jobs:
           python3 -m http.server 8765 >/tmp/tm-http.log 2>&1 &
           SERVER=$!
           trap 'kill $SERVER || true' EXIT
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:8765/tools/performance_browser_harness.html >/dev/null; then break; fi
+            sleep 0.1
+          done
+          curl -fsS http://127.0.0.1:8765/tools/performance_browser_harness.html >/dev/null
           CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
           if [ -z "$CHROME" ]; then
             echo "Chrome/Chromium not available on runner"
