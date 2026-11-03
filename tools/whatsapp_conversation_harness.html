@@ -1,0 +1,55 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>WhatsApp Conversation Harness</title></head>
+<body>
+<div id="tm-wa-date"></div>
+<div id="tm-wa-fu-summary"><div class="tm-wa-actions"></div><span data-k="received"></span><span data-k="waiting"></span><span data-k="answered"></span><span data-k="oldest"></span></div>
+<table><tbody id="fu-tbody"><tr><td>Lead</td><td><button class="tm-agendar-btn" data-lead-id="lead-1">Agendar</button></td></tr></tbody></table>
+<script>
+window.CRM_CANONICAL={
+  rpc:async function(name,args){
+    if(name==='whatsapp_lead_briefing')return {
+      lead:{id:'lead-1',nome:'Cliente Teste',telefone:'5511999999999'},
+      whatsapp_events:[
+        {session_id:'s1',message_id:'m1',direction:'inbound',text:'Olá',type:'conversation',at:'2026-11-03T18:00:00Z'},
+        {session_id:'s1',message_id:'m2',direction:'outbound',text:'Oi, tudo bem?',type:'conversation',at:'2026-11-03T18:01:00Z'},
+        {session_id:'s1',message_id:'m3',direction:'inbound',text:'[imagem]',type:'imageMessage',at:'2026-11-03T18:02:00Z'},
+        {session_id:'s1',message_id:'m4',direction:'inbound',text:'[áudio]',type:'audioMessage',at:'2026-11-03T18:03:00Z'}
+      ]
+    };
+    if(name==='whatsapp_followup_summary')return {};
+    if(name==='whatsapp_followup_events')return [];
+    return [];
+  }
+};
+window.TM_WA_STORAGE={
+  getLeadAssets:async()=>[
+    {session_id:'s1',message_id:'m3',media_kind:'image',signed_url:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='},
+    {session_id:'s1',message_id:'m4',media_kind:'audio',signed_url:'data:audio/ogg;base64,T2dnUw=='}
+  ]
+};
+</script>
+<script src="../crm-whatsapp-history-range.js"></script>
+<script src="../crm-whatsapp-live-notifications.js"></script>
+<script>
+(async()=>{
+  try{
+    const now=new Date('2026-11-03T19:00:00Z');
+    window.TM_WA_HISTORY_UI.range=()=>({from:new Date('2026-11-03T00:00:00Z'),to:new Date('2026-11-03T23:59:59Z')});
+    await window.TM_WA_HISTORY_UI.openLeadHistory('lead-1');
+    await new Promise(r=>setTimeout(r,50));
+    if(!document.querySelector('.tm-wa-chat-shell'))throw new Error('chat shell missing');
+    if(document.querySelectorAll('.tm-wa-msg.in').length<3)throw new Error('inbound bubbles missing');
+    if(document.querySelectorAll('.tm-wa-msg.out').length<1)throw new Error('outbound bubble missing');
+    if(!document.querySelector('.tm-wa-media-img'))throw new Error('image preview missing');
+    if(!document.querySelector('.tm-wa-media-audio'))throw new Error('audio preview missing');
+    document.dispatchEvent(new CustomEvent('tm:whatsapp-live-message',{detail:{leadId:'lead-1',direction:'inbound',messageText:'Nova mensagem',messageTimestampMs:now.getTime()}}));
+    await new Promise(r=>setTimeout(r,20));
+    if(!document.querySelector('.tm-wa-live-toast'))throw new Error('live popup missing');
+    document.body.setAttribute('data-result','PASS');
+  }catch(e){
+    document.body.setAttribute('data-result','FAIL');
+    document.body.setAttribute('data-error',String(e&&e.message||e));
+  }
+})();
+</script>
+</body></html>
