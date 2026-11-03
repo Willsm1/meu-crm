@@ -6,7 +6,7 @@ if(window.TAURUS_REGRESSION)return;
 const cells=new Map();
 const tests=[];
 const runtimeErrors=[];
-const VERSION='2026-11-03.8';
+const VERSION='2026-11-03.9';
 
 function now(){return Date.now()}
 function makeRunId(){
@@ -277,6 +277,7 @@ window.TAURUS_REGRESSION={
  ['followup','Follow-up','Fila, filtros e dados de follow-up'],
  ['supabase','Supabase','Configuração, sessão e leitura segura'],
  ['whatsapp','WhatsApp','Runtime, gateway, sessões e captura'],
+ ['conversation','Conversa WhatsApp','Histórico visual, espelhamento e alertas realtime'],
  ['media','Mídia','Storage/media modules e persistência'],
  ['safety','Segurança','Travas contra ações destrutivas e erros runtime']
 ].forEach(x=>registerCell({id:x[0],label:x[1],description:x[2]}));
@@ -344,6 +345,13 @@ registerTest('whatsapp',{id:'auth-token',label:'Token disponível para gateway',
 registerTest('whatsapp',{id:'sessions-endpoint',label:'Endpoint de sessões responde',source:'/api/whatsapp/sessions',run:async({wa})=>{const d=await wa('/api/whatsapp/sessions');return {details:(d.sessions||[]).length+' sessão(ões)'}}});
 registerTest('whatsapp',{id:'candidates-endpoint',label:'Endpoint de captura/follow-up responde',source:'/api/whatsapp/followup/candidates',run:async({wa,assert})=>{const d=await wa('/api/whatsapp/followup/candidates?limit=5');assert(d&&d.mode==='hosted','gateway fora do modo hosted',d);return {details:'eventos '+Number(d.count||0)+' · persistência '+String(d.mediaPersistence||'n/a')}}});
 ['tm-wa-runtime','tm-wa-followup','tm-wa-matching','tm-wa-history-range','tm-wa-archive','tm-wa-bridge-hosted','tm-wa-followup-hosted','tm-wa-connections'].forEach(id=>registerTest('whatsapp',{id:'script-'+id,label:'Módulo '+id+' carregado',source:'#'+id,run:({assert,script})=>assert(script(id),'script ausente: '+id)}));
+
+/* Conversation */
+registerTest('conversation',{id:'history-ui-api',label:'API do histórico visual disponível',run:({assert})=>{assert(!!window.TM_WA_HISTORY_UI,'TM_WA_HISTORY_UI ausente');assert(typeof window.TM_WA_HISTORY_UI.openLeadHistory==='function','openLeadHistory ausente');return {details:'conversa visual pronta'}}});
+registerTest('conversation',{id:'live-notification-api',label:'Pop-up realtime WhatsApp disponível',run:({assert})=>{assert(!!window.TM_WA_LIVE_NOTIFICATIONS,'TM_WA_LIVE_NOTIFICATIONS ausente');assert(typeof window.TM_WA_LIVE_NOTIFICATIONS.show==='function','show de notificação ausente');return {details:'alerta inbound pronto'}}});
+registerTest('conversation',{id:'history-script',label:'Módulo visual de conversa carregado',source:'#tm-wa-history-range',run:({assert,script})=>assert(script('tm-wa-history-range'),'módulo de histórico ausente')});
+registerTest('conversation',{id:'notification-script',label:'Módulo de pop-up realtime carregado',source:'#tm-wa-live-notifications',run:({assert,script})=>assert(script('tm-wa-live-notifications'),'módulo de pop-up ausente')});
+registerTest('conversation',{id:'candidate-direction-contract',label:'Eventos WhatsApp expõem direção e tipo',source:'/api/whatsapp/followup/candidates',run:async({wa,assert})=>{const d=await wa('/api/whatsapp/followup/candidates?limit=5');const a=Array.isArray(d.candidates)?d.candidates:[];if(!a.length)return {details:'sem candidatos para amostrar'};const e=a[0];assert('direction' in e&&'messageType' in e&&'messageId' in e,'contrato de conversa incompleto',e);return {details:'direção/tipo/id presentes'}}});
 
 /* Media */
 ['tm-wa-hosted-media-compat','tm-wa-storage','tm-wa-media','tm-wa-archive-hotfix'].forEach(id=>registerTest('media',{id:'script-'+id,label:'Módulo '+id+' carregado',source:'#'+id,run:({assert,script})=>assert(script(id),'script ausente: '+id)}));
