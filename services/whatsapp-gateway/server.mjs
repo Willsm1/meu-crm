@@ -261,6 +261,22 @@ if(STAGING_MODE){
       res.json({ok:true,...statusPayload(s)});
     }catch(err){res.status(400).json({ok:false,error:err.message||String(err)})}
   });
+  app.post('/api/staging/sessions/:slot/reset-pairing',async(req,res)=>{
+    try{
+      const old=getSession(req.taurusUser.id,req.params.slot);
+      old.suppressReconnect=true;
+      if(old.reconnectTimer)clearTimeout(old.reconnectTimer);
+      old.reconnectTimer=null;
+      try{old.sock?.end?.(new Error('staging_pairing_reset'))}catch{}
+      old.sock=null;
+      sessions.delete(key(old.userId,old.slot));
+      await fs.rm(old.authDir,{recursive:true,force:true});
+      await fs.mkdir(old.authDir,{recursive:true});
+      const fresh=getSession(req.taurusUser.id,req.params.slot);
+      patch(fresh,{phase:'disconnected',connected:false,qrDataUrl:null,user:null,lastError:null});
+      res.json({ok:true,reset:true,...statusPayload(fresh)});
+    }catch(err){res.status(500).json({ok:false,error:err.message||String(err)})}
+  });
   app.post('/api/staging/sessions/:slot/restart',async(req,res)=>{
     try{
       const old=getSession(req.taurusUser.id,req.params.slot);
