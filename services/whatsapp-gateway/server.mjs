@@ -18,7 +18,10 @@ const SUPABASE_SERVICE_KEY=process.env.SUPABASE_SERVICE_ROLE_KEY||'';
 const ALLOWED_ORIGIN=process.env.TAURUS_ORIGIN||true;
 const MAX_EVENTS=Number(process.env.WA_EVENT_BUFFER||500);
 const MAX_MEDIA_BYTES=Number(process.env.WA_MEDIA_MAX_BYTES||25*1024*1024);
-const GATEWAY_VERSION='linked-device-outbound-v4';
+const GATEWAY_VERSION='linked-device-outbound-v4-staging';
+const STAGING_MODE=String(process.env.TAURUS_STAGING_MODE||'')==='1';
+const STAGING_TOKEN=String(process.env.TAURUS_STAGING_BYPASS_TOKEN||'');
+const STAGING_USER_ID=String(process.env.TAURUS_STAGING_USER_ID||'11111111-1111-4111-8111-111111111111');
 const logger=pino({level:process.env.LOG_LEVEL||'warn'});
 const app=express();
 app.use(cors({origin:ALLOWED_ORIGIN,credentials:false}));
@@ -181,7 +184,7 @@ sock.ev.on('messaging-history.set',h=>{
   }).catch(err=>logger.warn({err,sessionId:s.sessionId},'history backfill failed'))
 })
 sock.ev.on('connection.update',async u=>{const{connection,qr,lastDisconnect}=u;if(qr){let qrDataUrl=null;try{qrDataUrl=await QRCode.toDataURL(qr,{margin:2,width:320,errorCorrectionLevel:'M'})}catch(err){logger.error({err,sessionId:s.sessionId},'WhatsApp QR encode failed')}logger.warn({sessionId:s.sessionId,hasQr:Boolean(qr),hasQrDataUrl:Boolean(qrDataUrl)},'WhatsApp QR received');patch(s,{phase:'qr',connected:false,qrDataUrl,lastError:null})}if(connection==='open'){if(s.reconnectTimer)clearTimeout(s.reconnectTimer);s.reconnectTimer=null;patch(s,{phase:s.backfill?.enabled?'backfilling':'connected',connected:true,qrDataUrl:null,user:sock.user?{id:sock.user.id||null,name:sock.user.name||null}:null,lastError:null})}if(connection==='close'){const code=lastDisconnect?.error?.output?.statusCode;const policy=disconnectPolicy(code);const loggedOut=policy.loggedOut;const restartRequired=policy.restartRequired;logger.warn({sessionId:s.sessionId,code,loggedOut,restartRequired},'WhatsApp connection closed');if(restartRequired){try{await saveCreds();logger.warn({sessionId:s.sessionId},'WhatsApp creds persisted before required restart')}catch(err){logger.error({err,sessionId:s.sessionId},'failed to persist WhatsApp creds before restart')}}patch(s,{phase:loggedOut?'logged_out':'disconnected',connected:false,qrDataUrl:null,lastError:lastDisconnect?.error?.message||String(lastDisconnect?.error||'connection closed')});s.sock=null;if(!loggedOut&&!s.suppressReconnect&&!s.reconnectTimer){const reconnectDelay=policy.reconnectDelayMs;s.reconnectTimer=setTimeout(()=>{s.reconnectTimer=null;connect(s).catch(err=>patch(s,{phase:'error',lastError:err.message||String(err)}))},reconnectDelay)}}});return statusPayload(s)})();try{return await s.starting}catch(err){patch(s,{phase:'error',connected:false,lastError:err.message||String(err)});throw err}finally{s.starting=null}}
-async function authenticate(req){if(!SUPABASE_URL||!SUPABASE_KEY)throw Object.assign(new Error('gateway sem configuração Supabase'),{status:503});const auth=req.headers.authorization||'';if(!auth.startsWith('Bearer '))throw Object.assign(new Error('não autenticado'),{status:401});const r=await fetch(`${SUPABASE_URL}/auth/v1/user`,{headers:{apikey:SUPABASE_KEY,Authorization:auth}});if(!r.ok)throw Object.assign(new Error('sessão Taurus inválida'),{status:401});const u=await r.json();if(!u?.id)throw Object.assign(new Error('usuário inválido'),{status:401});return u}
+async function authenticate(req){if(STAGING_MODE&&STAGING_TOKEN&&String(req.headers['x-taurus-staging']||'')===STAGING_TOKEN)return{id:STAGING_USER_ID,staging:true};if(!SUPABASE_URL||!SUPABASE_KEY)throw Object.assign(new Error('gateway sem configuração Supabase'),{status:503});const auth=req.headers.authorization||'';if(!auth.startsWith('Bearer '))throw Object.assign(new Error('não autenticado'),{status:401});const r=await fetch(`${SUPABASE_URL}/auth/v1/user`,{headers:{apikey:SUPABASE_KEY,Authorization:auth}});if(!r.ok)throw Object.assign(new Error('sessão Taurus inválida'),{status:401});const u=await r.json();if(!u?.id)throw Object.assign(new Error('usuário inválido'),{status:401});return u}
 async function authMw(req,res,next){try{req.taurusUser=await authenticate(req);next()}catch(err){res.status(err.status||401).json({ok:false,error:err.message||String(err)})}}
 function userHeaders(auth,extra={}){return{apikey:SUPABASE_KEY,Authorization:auth,'Content-Type':'application/json','Accept-Profile':'crm','Content-Profile':'crm',...extra}}
 async function rpcAsUser(auth,name,args={}){const r=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{method:'POST',headers:userHeaders(auth),body:JSON.stringify(args)});const text=await r.text();if(!r.ok)throw new Error(`${name} ${r.status}: ${text.slice(0,240)}`);try{return text?JSON.parse(text):null}catch{return text}}
@@ -222,7 +225,59 @@ async function persistEventMedia(req,s,e){
 function candidateView(e){return{sessionId:e.sessionId,slot:e.slot,messageId:e.messageId,dedupeKey:e.dedupeKey,direction:e.direction,messageTimestampMs:e.messageTimestampMs,receivedAtMs:e.receivedAtMs,messageType:e.messageType,messageText:e.messageText,chatJid:e.chatJid,chatJidAlt:e.chatJidAlt,contactPhone:e.contactPhone,upsertType:e.upsertType||null,live:Boolean(e.live),historyBackfill:Boolean(e.backfillEligible),eligibleForFollowup:e.eligibleForFollowup,ignoreReason:e.ignoreReason,persistenceStatus:e.persistenceStatus||null,media:e.media?{...e.media,url:null}:null}}
 function userSessions(userId){return[...sessions.values()].filter(s=>s.userId===userId)}
 
-app.get('/health',(_req,res)=>res.json({ok:true,service:'taurus-whatsapp-gateway',mode:'hosted-multisession',version:GATEWAY_VERSION,sessions:sessions.size,directPersistence:Boolean(SUPABASE_SERVICE_KEY),dataRoot:DATA_ROOT,adminSessionView:true}));
+app.get('/health',(_req,res)=>res.json({ok:true,service:'taurus-whatsapp-gateway',mode:'hosted-multisession',version:GATEWAY_VERSION,sessions:sessions.size,directPersistence:Boolean(SUPABASE_SERVICE_KEY),dataRoot:DATA_ROOT,adminSessionView:true,staging:STAGING_MODE}));
+if(STAGING_MODE){
+  app.get('/staging',(_req,res)=>res.sendFile(path.join(process.cwd(),'staging.html')));
+  app.use('/api/staging',authMw);
+  app.post('/api/staging/test-lead',async(req,res)=>{
+    try{
+      const phone=String(req.body?.phone||'');
+      const name=String(req.body?.name||'Cliente Staging');
+      const out=await rpcAsService('staging_upsert_test_lead',{p_phone:phone,p_name:name});
+      res.json(out||{ok:true});
+    }catch(err){res.status(400).json({ok:false,error:err.message||String(err)})}
+  });
+  app.get('/api/staging/conversation',async(req,res)=>{
+    try{
+      const raw=await rpcAsService('staging_conversation',{p_phone:String(req.query.phone||'')});
+      const out=Array.isArray(raw)?(raw[0]||{}):(raw||{});
+      const media=Array.isArray(out.media)?out.media.map(m=>({...m,url:m.storage_path?SUPABASE_URL+'/storage/v1/object/public/whatsapp-media/'+encPath(m.storage_path):null})):[];
+      res.json({...out,media});
+    }catch(err){res.status(400).json({ok:false,error:err.message||String(err)})}
+  });
+  app.post('/api/staging/reset',async(_req,res)=>{
+    try{res.json(await rpcAsService('staging_reset_test_data',{})||{ok:true})}
+    catch(err){res.status(400).json({ok:false,error:err.message||String(err)})}
+  });
+  app.post('/api/staging/sessions/:slot/pause',async(req,res)=>{
+    try{
+      const s=getSession(req.taurusUser.id,req.params.slot);
+      s.suppressReconnect=true;
+      if(s.reconnectTimer)clearTimeout(s.reconnectTimer);
+      s.reconnectTimer=null;
+      try{s.sock?.end?.(new Error('staging_pause'))}catch{}
+      s.sock=null;
+      patch(s,{phase:'staging_paused',connected:false,lastError:null});
+      res.json({ok:true,...statusPayload(s)});
+    }catch(err){res.status(400).json({ok:false,error:err.message||String(err)})}
+  });
+  app.post('/api/staging/sessions/:slot/restart',async(req,res)=>{
+    try{
+      const old=getSession(req.taurusUser.id,req.params.slot);
+      old.suppressReconnect=true;
+      if(old.reconnectTimer)clearTimeout(old.reconnectTimer);
+      old.reconnectTimer=null;
+      try{old.sock?.end?.(new Error('staging_restart'))}catch{}
+      old.sock=null;
+      sessions.delete(key(old.userId,old.slot));
+      const s=getSession(req.taurusUser.id,req.params.slot);
+      s.forceBackfill=true;
+      const out=await connect(s);
+      res.json({ok:true,simulatedProcessRestart:true,...out});
+    }catch(err){res.status(500).json({ok:false,error:err.message||String(err)})}
+  });
+}
+
 app.use('/api/whatsapp',authMw);
 app.get('/api/whatsapp/sessions',async(req,res)=>{try{const target=await resolveSessionTarget(req);const rows=userSessions(target.userId).map(s=>target.readOnly?adminStatusPayload(s):statusPayload(s));res.json({sessions:rows,targetUserId:target.userId,readOnly:target.readOnly,viewerRole:target.viewerRole})}catch(err){res.status(err.status||500).json({ok:false,error:err.message||String(err)})}});
 app.post('/api/whatsapp/sessions/:slot/start',async(req,res)=>{try{const s=getSession(req.taurusUser.id,req.params.slot);logger.warn({userId:req.taurusUser.id,slot:req.params.slot,sessionId:s.sessionId},'WhatsApp session start requested');const out=await connect(s);logger.warn({sessionId:s.sessionId,phase:out?.phase,connected:out?.connected,hasQr:Boolean(out?.qrDataUrl)},'WhatsApp session start response');res.json({ok:true,...out})}catch(err){logger.error({err,userId:req.taurusUser?.id,slot:req.params.slot},'WhatsApp session start failed');res.status(500).json({ok:false,error:err.message||String(err)})}});
