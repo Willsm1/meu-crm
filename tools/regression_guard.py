@@ -85,6 +85,7 @@ require(regression_core, "waitSupabaseClient", "Supabase readiness wait in regre
 require(regression_core, "directInsertRegression", "REST fallback for regression report persistence")
 require(regression_core, "directRead", "REST fallback for Supabase regression reads")
 require(regression_core, "authenticatedUser", "client-independent Supabase session validation")
+require(regression_core, "Sessão Supabase válida", "session regression test remains registered")
 require(regression_core, "flushPendingReport", "queued retry for unsaved regression reports")
 require(regression_core, "tm_regression_pending_report", "pending regression report local queue")
 require(regression_core, "client-duplicate", "insert-only duplicate handling for regression reports")
