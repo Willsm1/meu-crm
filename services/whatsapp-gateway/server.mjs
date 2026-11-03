@@ -6,6 +6,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import makeWASocket, { Browsers, DisconnectReason, useMultiFileAuthState, downloadContentFromMessage } from 'baileys';
 import { classifyEvent, disconnectPolicy, phoneFromJid, phoneFromMessageKey as resolvePhoneFromMessageKey, shouldSyncHistory } from './core.mjs';
+import { downloadMediaBuffer, shouldCleanupLocalMedia } from './media-core.mjs';
 
 const PORT=Number(process.env.PORT||8787);
 const DATA_ROOT=path.resolve(process.env.TAURUS_DATA_ROOT||'./.data');
@@ -68,31 +69,24 @@ async function captureMedia(s,msg,e){
   if(!node)return;
   const meta={kind:spec.kind,mimeType:node.mimetype||null,fileName:node.fileName||null,durationSeconds:Number(node.seconds||0)||null,caption:node.caption||null,status:'downloading',byteSize:null,error:null,supabaseStatus:'pending',persistError:null,storagePath:null};
   e.media=meta;
-  let lastErr=null;
-  for(let attempt=1;attempt<=2;attempt++){
-    try{
-      const chunks=[];let total=0;
-      const stream=await downloadContentFromMessage(node,spec.stream);
-      for await(const chunk of stream){
-        const b=Buffer.from(chunk);total+=b.length;
-        if(total>MAX_MEDIA_BYTES)throw new Error('mídia excede limite do gateway');
-        chunks.push(b)
-      }
-      const buf=Buffer.concat(chunks);
-      if(!buf.length)throw new Error('mídia vazia');
-      await fs.mkdir(s.mediaDir,{recursive:true});
-      const file=`${safeId(e.messageId)}.${extFor(meta.mimeType,spec.kind)}`;
-      await fs.writeFile(path.join(s.mediaDir,file),buf);
-      Object.assign(meta,{status:'stored_gateway',byteSize:buf.length,file,error:null});
-      logger.warn({sessionId:s.sessionId,messageId:e.messageId,kind:spec.kind,byteSize:buf.length,attempt},'media captured at gateway');
-      return
-    }catch(err){
-      lastErr=err;
-      logger.warn({err,sessionId:s.sessionId,messageId:e.messageId,kind:spec.kind,attempt},'media capture attempt failed');
-      if(attempt<2)await new Promise(r=>setTimeout(r,750))
-    }
+  try{
+    const buf=await downloadMediaBuffer({
+      node,
+      streamType:spec.stream,
+      download:downloadContentFromMessage,
+      maxBytes:MAX_MEDIA_BYTES,
+      attempts:2,
+      delayMs:750
+    });
+    await fs.mkdir(s.mediaDir,{recursive:true});
+    const file=`${safeId(e.messageId)}.${extFor(meta.mimeType,spec.kind)}`;
+    await fs.writeFile(path.join(s.mediaDir,file),buf);
+    Object.assign(meta,{status:'stored_gateway',byteSize:buf.length,file,error:null});
+    logger.warn({sessionId:s.sessionId,messageId:e.messageId,kind:spec.kind,byteSize:buf.length},'media captured at gateway');
+  }catch(err){
+    Object.assign(meta,{status:'failed',supabaseStatus:'capture_failed',error:err?.message||String(err)});
+    logger.warn({err,sessionId:s.sessionId,messageId:e.messageId,kind:spec.kind},'media capture failed')
   }
-  Object.assign(meta,{status:'failed',supabaseStatus:'capture_failed',error:lastErr?.message||String(lastErr||'media capture failed')})
 }
 function serviceHeaders(extra={}){return{apikey:SUPABASE_SERVICE_KEY,Authorization:`Bearer ${SUPABASE_SERVICE_KEY}`,'Content-Type':'application/json','Accept-Profile':'crm','Content-Profile':'crm',...extra}}
 async function rpcAsService(name,args={}){if(!SUPABASE_SERVICE_KEY)throw new Error('service role ausente');const r=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{method:'POST',headers:serviceHeaders(),body:JSON.stringify(args)});const text=await r.text();if(!r.ok)throw new Error(`${name} ${r.status}: ${text.slice(0,240)}`);try{return text?JSON.parse(text):null}catch{return text}}
@@ -144,7 +138,7 @@ async function persistEventDirect(s,e){
     Object.assign(e.media,{supabaseStatus:'stored',persistError:null,storagePath});
     // A mídia já está no Storage privado do Supabase; a cópia local é apenas cache.
     // Removê-la evita que o disco persistente do gateway encha e force reconexões do WhatsApp.
-    try{await fs.rm(filePath,{force:true});e.media.file=null}catch(cleanErr){logger.warn({err:cleanErr,sessionId:e.sessionId,messageId:e.messageId},'local media cleanup failed')}
+    if(shouldCleanupLocalMedia(e.media.supabaseStatus)){try{await fs.rm(filePath,{force:true});e.media.file=null}catch(cleanErr){logger.warn({err:cleanErr,sessionId:e.sessionId,messageId:e.messageId},'local media cleanup failed')}}
     logger.info({sessionId:e.sessionId,messageId:e.messageId,storagePath},'event/media persisted directly');
   }catch(err){e.persistenceStatus='error';if(e.media){e.media.supabaseStatus='error';e.media.persistError=err?.message||String(err)}logger.warn({err,sessionId:e.sessionId,messageId:e.messageId},'direct persistence failed')}
 }
@@ -228,7 +222,7 @@ async function persistEventMedia(req,s,e){
     await uploadAsUser(auth,storagePath,buf,e.media.mimeType);
     await rpcAsUser(auth,'whatsapp_media_register',{p_lead_id:matched.lead_id,p_event_id:null,p_session_id:e.sessionId,p_message_id:e.messageId,p_media_kind:e.media.kind,p_mime_type:e.media.mimeType||'application/octet-stream',p_storage_path:storagePath,p_original_filename:e.media.fileName||null,p_byte_size:buf.length,p_duration_seconds:e.media.durationSeconds||null,p_caption:e.media.caption||null});
     Object.assign(e.media,{supabaseStatus:'stored',persistError:null,storagePath});
-    try{await fs.rm(filePath,{force:true});e.media.file=null}catch(cleanErr){logger.warn({err:cleanErr,sessionId:e.sessionId,messageId:e.messageId},'local media cleanup failed')}
+    if(shouldCleanupLocalMedia(e.media.supabaseStatus)){try{await fs.rm(filePath,{force:true});e.media.file=null}catch(cleanErr){logger.warn({err:cleanErr,sessionId:e.sessionId,messageId:e.messageId},'local media cleanup failed')}}
     logger.info({sessionId:e.sessionId,messageId:e.messageId,storagePath},'media persisted to Supabase');
   }catch(err){e.media.supabaseStatus='error';e.media.persistError=err?.message||String(err);logger.warn({err,sessionId:e.sessionId,messageId:e.messageId},'media Supabase persistence failed')}
 }
