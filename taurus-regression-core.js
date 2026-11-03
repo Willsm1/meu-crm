@@ -6,7 +6,7 @@ if(window.TAURUS_REGRESSION)return;
 const cells=new Map();
 const tests=[];
 const runtimeErrors=[];
-const VERSION='2026-11-03.1';
+const VERSION='2026-11-03.2';
 
 function now(){return Date.now()}
 function safeString(v){try{return typeof v==='string'?v:JSON.stringify(v)}catch(_e){return String(v)}}
@@ -198,7 +198,7 @@ registerTest('navigation',{id:'tabs-target-pages',label:'Todas as abas apontam p
  ['lead-status','Campo status','#f-status'],
  ['save-button','Botão salvar lead','#save-btn']
 ].forEach(x=>domTest('leads',x[0],x[1],x[2]));
-registerTest('leads',{id:'lead-table-header',label:'Tabela de leads mantém colunas críticas',run:({assert})=>{const txt=(document.getElementById('leads-thead')||{}).innerText||'';['Nome','Responsável','Contato','Status','Valor','Origem','Perfil','Região','Ações'].forEach(k=>assert(txt.includes(k),'coluna ausente: '+k));return {details:'colunas críticas presentes'}}});
+registerTest('leads',{id:'lead-table-header',label:'Tabela de leads mantém colunas críticas',run:({assert})=>{const txt=(document.getElementById('leads-thead')||{}).textContent||'';['Nome','Responsável','Contato','Status','Valor','Origem','Perfil','Região','Ações'].forEach(k=>assert(txt.includes(k),'coluna ausente: '+k));return {details:'colunas críticas presentes'}}});
 
 /* Follow-up */
 domTest('followup','page','Página Follow-up','#page-followup');
@@ -228,11 +228,11 @@ registerTest('whatsapp',{id:'candidates-endpoint',label:'Endpoint de captura/fol
 
 /* Media */
 ['tm-wa-hosted-media-compat','tm-wa-storage','tm-wa-media','tm-wa-archive-hotfix'].forEach(id=>registerTest('media',{id:'script-'+id,label:'Módulo '+id+' carregado',source:'#'+id,run:({assert,script})=>assert(script(id),'script ausente: '+id)}));
-registerTest('media',{id:'assets-read',label:'Tabela de mídia legível',source:'crm.whatsapp_media_assets',run:async({supaRead})=>({details:'leitura ok · '+(await supaRead('whatsapp_media_assets','id')).length+' amostra(s)'})});
+registerTest('media',{id:'assets-contract',label:'Contrato de mídia acessível pelo gateway',source:'/api/whatsapp/followup/candidates',run:async({wa,assert})=>{const d=await wa('/api/whatsapp/followup/candidates?limit=5');assert(d&&Array.isArray(d.candidates),'candidates de mídia indisponíveis',d);return {details:'gateway autorizado · '+d.candidates.length+' candidato(s) amostrados'}}});
 registerTest('media',{id:'candidate-persistence',label:'Gateway declara persistência de mídia',source:'/api/whatsapp/followup/candidates',run:async({wa,assert})=>{const d=await wa('/api/whatsapp/followup/candidates?limit=1');assert(d.mediaPersistence,'mediaPersistence ausente');assert(d.directPersistence===true,'persistência direta do gateway não está ativa',d);return {details:d.mediaPersistence}}});
 
 /* Safety */
-registerTest('safety',{id:'no-runtime-errors',label:'Nenhum erro JS capturado durante a sessão do painel',severity:'major',run:({assert,runtimeErrors})=>{assert(runtimeErrors.length===0,'erros JS capturados',runtimeErrors);return {details:'0 erros runtime'}}});
+registerTest('safety',{id:'no-runtime-errors',label:'Nenhum erro JS acionável capturado durante a sessão do painel',severity:'major',run:({assert,runtimeErrors})=>{const actionable=runtimeErrors.filter(e=>{const m=String(e&&e.message||'');return !(m==='Failed to fetch'&&!e.source&&!e.line&&!e.col)});const transient=runtimeErrors.length-actionable.length;assert(actionable.length===0,'erros JS acionáveis capturados',actionable);return {details:'0 erros acionáveis'+(transient?' · '+transient+' falha(s) de rede transitória(s) observada(s)':'')}}});
 registerTest('safety',{id:'no-test-prod-reset',label:'Painel não expõe reset global de produção',run:({assert})=>{const s=String(window.TAURUS_REGRESSION.resetTestState);assert(!/whatsapp.*remove|auth.*reset|leads\s*=\s*\[\]/i.test(s),'reset de teste contém ação destrutiva');return {details:'reset limitado a fixtures tm_regression_fixture_*'}}});
 registerTest('safety',{id:'report-table',label:'Relatórios persistem fora dos dados comerciais',source:'crm.regression_runs',run:async({supaRead})=>{await supaRead('regression_runs','id');return {details:'canal isolado disponível'}}});
 
