@@ -77,6 +77,7 @@ require(wa_loader, 'crm-whatsapp-media-preview.js', 'validated media preview loa
 require(wa_loader, 'whatsapp-followup-bridge-hosted.js', 'hosted Follow-up bridge loaded', 1)
 require(wa_loader, 'crm-whatsapp-followup-hosted-adapter.js', 'hosted KPI adapter loaded', 1)
 require(wa_loader, 'crm-whatsapp-connections.js', 'multi-WhatsApp manager loaded', 1)
+require(wa_loader, 'crm-whatsapp-live-notifications.js', 'WhatsApp realtime notification module loaded', 1)
 require(wa_media_compat, 'isLegacyMedia', 'legacy media source translated')
 require(wa_media_compat, '/api/whatsapp/media/', 'hosted media endpoint used')
 require(wa_media_compat, 'getLeadAssets', 'stored media hydration preserved')
@@ -108,10 +109,17 @@ require(gateway, "./media-core.mjs", "gateway tested media core import")
 require(gateway_core, "disconnectPolicy", "515 restart policy covered")
 require(gateway_core, "classifyEvent", "message classification covered")
 require(gateway_core, "phoneFromMessageKey", "LID/PN phone resolution covered")
+require(gateway_core, "historyBackfillPlan", "bounded WhatsApp history recovery plan")
 require(gateway_media_core, "downloadMediaBuffer", "media retry helper covered")
 require(gateway_media_core, "shouldCleanupLocalMedia", "safe media cleanup policy covered")
 require(gateway_package, '"test": "node --test test/*.test.mjs"', "gateway test command")
 forbid(gateway, "oneTimeResetWillSession", "hard-coded production WhatsApp auth reset")
+
+wa_history = require_file("crm-whatsapp-history-range.js")
+wa_bridge = require_file("whatsapp-followup-bridge-hosted.js")
+require(wa_history, "tm-wa-chat-shell", "WhatsApp-like chat visual")
+require(wa_history, "TM_WA_HISTORY_UI", "WhatsApp conversation UI API")
+require(wa_bridge, "tm:whatsapp-live-message", "persisted live inbound event dispatch")
 
 if errors:
     print("REGRESSION GUARD: FAIL")
@@ -121,6 +129,3 @@ if errors:
 
 print("REGRESSION GUARD: PASS")
 
-require(load("crm-whatsapp-history-range.js"), "tm-wa-chat-shell", "WhatsApp-like chat visual")
-require(load("crm-whatsapp-history-range.js"), "TM_WA_HISTORY_UI", "WhatsApp conversation UI API")
-require(load("whatsapp-followup-bridge-hosted.js"), "tm:whatsapp-live-message", "persisted live inbound event dispatch")
