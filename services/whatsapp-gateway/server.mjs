@@ -150,14 +150,14 @@ if(upsertType==='notify'&&msgTs&&s.backfill?.latestMs&&Date.now()-s.backfill.lat
     }).catch(err=>logger.warn({err,sessionId:s.sessionId,chatJid:chatKey},'on-demand WhatsApp catch-up failed'))
   }
 }}}
-async function connect(s){if(s.starting)return s.starting;if(s.sock&&s.state.connected)return statusPayload(s);s.starting=(async()=>{patch(s,{phase:'starting',connected:false,lastError:null});await fs.mkdir(s.authDir,{recursive:true});const{state:auth,saveCreds}=await useMultiFileAuthState(s.authDir);const isRegistered=Boolean(auth?.creds?.registered);logger.warn({sessionId:s.sessionId,registered:isRegistered,hasMe:Boolean(auth?.creds?.me)},'WhatsApp auth state loaded');s.backfill=isRegistered?await backfillPlan(s):{enabled:false,cutoffMs:0,latestMs:null,manual:false,pairing:true};s.forceBackfill=false;const sock=makeWASocket({
+async function connect(s){if(s.starting)return s.starting;if(s.sock&&s.state.connected)return statusPayload(s);s.starting=(async()=>{patch(s,{phase:'starting',connected:false,lastError:null});await fs.mkdir(s.authDir,{recursive:true});const{state:auth,saveCreds}=await useMultiFileAuthState(s.authDir);const isRegistered=Boolean(auth?.creds?.registered);const hasMe=Boolean(auth?.creds?.me);const isPaired=isRegistered||hasMe;logger.warn({sessionId:s.sessionId,registered:isRegistered,hasMe,isPaired},'WhatsApp auth state loaded');s.backfill=isPaired?await backfillPlan(s):{enabled:false,cutoffMs:0,latestMs:null,manual:false,pairing:true};s.forceBackfill=false;const sock=makeWASocket({
   auth,
   browser:Browsers.windows('Desktop'),
   // Sessão nova/desregistrada deve seguir o fluxo puro de pareamento.
   // Backfill e init queries só podem ser ativados depois que o WhatsApp já estiver registrado.
-  syncFullHistory:isRegistered&&Boolean(s.backfill?.enabled),
-  shouldSyncHistoryMessage:()=>isRegistered&&Boolean(s.backfill?.enabled),
-  fireInitQueries:isRegistered&&Boolean(s.backfill?.enabled),
+  syncFullHistory:isPaired&&Boolean(s.backfill?.enabled),
+  shouldSyncHistoryMessage:()=>isPaired&&Boolean(s.backfill?.enabled),
+  fireInitQueries:isPaired&&Boolean(s.backfill?.enabled),
   markOnlineOnConnect:false,
   printQRInTerminal:false,
   // Grupos, Status e newsletters nunca são candidatos a follow-up no Taurus.
