@@ -6,7 +6,7 @@ if(window.TAURUS_REGRESSION)return;
 const cells=new Map();
 const tests=[];
 const runtimeErrors=[];
-const VERSION='2026-11-03.5';
+const VERSION='2026-11-03.6';
 
 function now(){return Date.now()}
 function makeRunId(){
@@ -71,13 +71,17 @@ async function directInsertRegression(payload){
       'Content-Type':'application/json',
       'Accept-Profile':cfg.schema||'crm',
       'Content-Profile':cfg.schema||'crm',
-      'Prefer':'resolution=merge-duplicates,return=representation'
+      'Prefer':'return=representation'
     },
     body:JSON.stringify(payload)
   });
   const text=await r.text();
   let data=null;try{data=text?JSON.parse(text):null}catch(_e){}
-  if(!r.ok)throw new Error((data&&data.message)||('fallback REST HTTP '+r.status));
+  if(!r.ok){
+    const msg=String(data&&data.message||'');
+    if(r.status===409&&/duplicate key|already exists/i.test(msg))return {id:payload.id,duplicate:true};
+    throw new Error(msg||('fallback REST HTTP '+r.status));
+  }
   const row=Array.isArray(data)?data[0]:data;
   return row||{};
 }
@@ -132,8 +136,11 @@ async function persist(report){
   let primaryError=null;
   try{
     const cli=await waitSupabaseClient();
-    const out=await cli.from('regression_runs').upsert(payload,{onConflict:'id'}).select('id,created_at').single();
-    if(out.error)throw out.error;
+    const out=await cli.from('regression_runs').insert(payload).select('id,created_at').single();
+    if(out.error){
+      if(String(out.error.code||'')==='23505')return {ok:true,via:'client-duplicate',id:report.runId,createdAt:null};
+      throw out.error;
+    }
     return {ok:true,via:'client',id:out.data.id,createdAt:out.data.created_at};
   }catch(e){primaryError=errMsg(e)}
   try{
