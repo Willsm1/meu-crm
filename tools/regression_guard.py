@@ -85,6 +85,7 @@ require(regression_core, "waitSupabaseClient", "Supabase readiness wait in regre
 require(regression_core, "directInsertRegression", "REST fallback for regression report persistence")
 require(regression_core, "flushPendingReport", "queued retry for unsaved regression reports")
 require(regression_core, "tm_regression_pending_report", "pending regression report local queue")
+require(regression_core, "client-duplicate", "insert-only duplicate handling for regression reports")
 
 require(actionbar, "taurus-regression-core.js", "anti-regression core loader")
 require(actionbar, "taurus-regression-panel.js", "anti-regression panel loader")
