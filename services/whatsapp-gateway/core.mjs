@@ -40,3 +40,18 @@ export function disconnectPolicy(code){
 export function shouldSyncHistory(mode){
   return mode==='history';
 }
+
+
+export function historyBackfillPlan(latestMs,nowMs=Date.now(),options={}){
+  const force=options.force===true;
+  const maxAgeMs=Math.max(1,Number(options.maxAgeMs||7*24*60*60*1000));
+  const staleAfterMs=Math.max(0,Number(options.staleAfterMs||15*60*1000));
+  const overlapMs=Math.max(0,Number(options.overlapMs||12*60*60*1000));
+  const now=Number(nowMs||Date.now());
+  const latest=Number(latestMs||0)||null;
+  const floor=now-maxAgeMs;
+  if(force)return{enabled:true,cutoffMs:floor,latestMs:latest,manual:true,gapMs:latest?Math.max(0,now-latest):maxAgeMs};
+  const gap=latest?Math.max(0,now-latest):maxAgeMs;
+  const cutoff=Math.max(floor,(latest||floor)-overlapMs);
+  return{enabled:gap>staleAfterMs,cutoffMs:cutoff,latestMs:latest,manual:false,gapMs:gap};
+}
