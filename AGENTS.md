@@ -45,3 +45,13 @@ Queryability, idempotent append, isolation from realtime, no auth reset.
 ## Destructive actions
 
 Any auth reset, production data deletion, schema-destructive migration or forced branch update requires explicit evidence, narrow scope and an explicit decision before execution.
+
+
+## Cell-based regression rule
+
+- Treat each product pillar as an isolated cell with an explicit behavioral contract.
+- Every new cell/feature must register its own runtime checks in `window.TAURUS_REGRESSION`.
+- A feature is not complete if its happy path, critical failure path, and integration boundary are not represented in the regression registry.
+- Existing tests are permanent protection. Removing or weakening a test requires explicit evidence that the underlying contract changed.
+- The temporary CRM Anti-Regressão button may be removed at project completion, but the automated test registry and CI protections remain.
+- Test resets may only touch fixtures under the dedicated regression namespace; they must never reset global WhatsApp auth, production leads, interactions, history or media.
