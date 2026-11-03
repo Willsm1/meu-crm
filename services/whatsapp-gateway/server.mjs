@@ -37,7 +37,28 @@ function patch(s,next){s.state={...s.state,...next,updatedAt:new Date().toISOStr
 function statusPayload(s){return{slot:s.slot,sessionId:s.sessionId,phase:s.state.phase,connected:s.state.connected,qrDataUrl:s.state.qrDataUrl,user:s.state.user,lastError:s.state.lastError,eventCount:s.events.length,followupCandidateCount:s.events.filter(e=>e.eligibleForFollowup).length,directPersistence:Boolean(SUPABASE_SERVICE_KEY),updatedAt:s.state.updatedAt}}
 function adminStatusPayload(s){const p=statusPayload(s);p.qrDataUrl=null;return p}
 function asEpochMs(v){if(v==null)return null;if(typeof v==='number')return v>1e12?v:v*1000;if(typeof v==='bigint')return Number(v)*1000;if(typeof v==='string'){const n=Number(v);return Number.isFinite(n)?(n>1e12?n:n*1000):null}if(typeof v?.toNumber==='function')return v.toNumber()*1000;const n=Number(v);return Number.isFinite(n)?(n>1e12?n:n*1000):null}
-function phoneFromJid(jid){const m=String(jid||'').match(/^(\d+)@s\.whatsapp\.net$/);return m?m[1]:null}
+function phoneFromJid(jid){
+  const m=String(jid||'').match(/^(\d+)@s\.whatsapp\.net$/);
+  return m?m[1]:null
+}
+function phoneFromMessageKey(key={}){
+  // Baileys 6.7.x passou a usar LID como remoteJid em várias conversas 1:1.
+  // O número real pode vir nos aliases PN abaixo. Nunca usar o número interno @lid
+  // como telefone do lead.
+  const candidates=[
+    key.remoteJidAlt,
+    key.participantAlt,
+    key.participantPn,
+    key.senderPn,
+    key.remoteJid,
+    key.participant
+  ];
+  for(const jid of candidates){
+    const phone=phoneFromJid(jid);
+    if(phone)return phone
+  }
+  return null
+}
 function messageText(message,type){if(!message||!type)return null;try{if(type==='conversation')return String(message.conversation||'').trim()||null;if(type==='extendedTextMessage')return String(message.extendedTextMessage?.text||'').trim()||null;if(type==='imageMessage')return String(message.imageMessage?.caption||'').trim()||'[imagem]';if(type==='videoMessage')return String(message.videoMessage?.caption||'').trim()||'[vídeo]';if(type==='audioMessage')return'[áudio]';if(type==='stickerMessage')return'[figurinha]';if(type==='documentMessage')return String(message.documentMessage?.fileName||message.documentMessage?.caption||'[documento]').trim();if(type==='contactMessage')return'[contato]';if(type==='contactsArrayMessage')return'[contatos]';if(type==='locationMessage'||type==='liveLocationMessage')return'[localização]'}catch{}return null}
 function extFor(mime,kind){const m=String(mime||'').toLowerCase();if(m.includes('jpeg'))return'jpg';if(m.includes('png'))return'png';if(m.includes('webp'))return'webp';if(m.includes('gif'))return'gif';if(m.includes('ogg'))return'ogg';if(m.includes('opus'))return'opus';if(m.includes('mpeg'))return'mp3';if(m.includes('aac'))return'aac';if(m.includes('wav'))return'wav';if(m.includes('webm'))return'webm';if(m.includes('quicktime'))return'mov';if(m.includes('mp4'))return'mp4';if(m.includes('pdf'))return'pdf';if(m.includes('word'))return'docx';return kind==='audio'?'bin':kind==='image'?'img':kind==='video'?'vid':'bin'}
 function classify(e){if(!e.hasMessage)return{eligible:false,reason:'sem_payload'};const jid=String(e.chatJid||'');if(jid.endsWith('@g.us'))return{eligible:false,reason:'grupo'};if(jid==='status@broadcast'||jid.endsWith('@broadcast'))return{eligible:false,reason:'broadcast_status'};if(!FOLLOWUP_TYPES.has(e.messageType))return{eligible:false,reason:'tipo_tecnico_ou_nao_relevante'};if(e.upsertType==='notify')return{eligible:true,reason:null};const ageMs=Math.abs(Number(e.receivedAtMs||Date.now())-Number(e.messageTimestampMs||0));if(e.upsertType==='append'&&e.fromMe&&e.messageTimestampMs&&ageMs<=180000)return{eligible:true,reason:null,linkedDeviceOutbound:true};return{eligible:false,reason:'historico_ou_sync'}}
@@ -67,7 +88,7 @@ async function persistEventDirect(s,e){
     logger.info({sessionId:e.sessionId,messageId:e.messageId,storagePath},'event/media persisted directly');
   }catch(err){e.persistenceStatus='error';if(e.media){e.media.supabaseStatus='error';e.media.persistError=err?.message||String(err)}logger.warn({err,sessionId:e.sessionId,messageId:e.messageId},'direct persistence failed')}
 }
-async function captureUpsert(s,upsert){const receivedAt=Date.now(),upsertType=upsert?.type||'unknown';for(const msg of upsert?.messages||[]){const jid=msg?.key?.remoteJid||null;if(!jid)continue;const alt=msg?.key?.remoteJidAlt||null;const type=msg?.message?Object.keys(msg.message)[0]||null:null;const e={sessionId:s.sessionId,slot:s.slot,source:'messages.upsert',upsertType,live:upsertType==='notify',messageId:msg?.key?.id||null,chatJid:jid,chatJidAlt:alt,contactPhone:phoneFromJid(jid)||phoneFromJid(alt)||null,fromMe:Boolean(msg?.key?.fromMe),direction:msg?.key?.fromMe?'outbound':'inbound',messageTimestampMs:asEpochMs(msg?.messageTimestamp),receivedAtMs:receivedAt,hasMessage:Boolean(msg?.message),messageType:type,messageText:messageText(msg?.message,type),media:null,persistenceStatus:'pending'};const c=classify(e);e.eligibleForFollowup=c.eligible;e.ignoreReason=c.reason;e.dedupeKey=`${s.sessionId}:${e.messageId||'sem-id'}`;if(!pushEvent(s,e))continue;if(e.eligibleForFollowup&&MEDIA_TYPES[type])await captureMedia(s,msg,e);if(e.eligibleForFollowup&&SUPABASE_SERVICE_KEY)await persistEventDirect(s,e)}}
+async function captureUpsert(s,upsert){const receivedAt=Date.now(),upsertType=upsert?.type||'unknown';for(const msg of upsert?.messages||[]){const jid=msg?.key?.remoteJid||null;if(!jid)continue;const alt=msg?.key?.remoteJidAlt||null;const type=msg?.message?Object.keys(msg.message)[0]||null:null;const e={sessionId:s.sessionId,slot:s.slot,source:'messages.upsert',upsertType,live:upsertType==='notify',messageId:msg?.key?.id||null,chatJid:jid,chatJidAlt:alt,contactPhone:phoneFromMessageKey(msg?.key)||phoneFromJid(alt)||null,fromMe:Boolean(msg?.key?.fromMe),direction:msg?.key?.fromMe?'outbound':'inbound',messageTimestampMs:asEpochMs(msg?.messageTimestamp),receivedAtMs:receivedAt,hasMessage:Boolean(msg?.message),messageType:type,messageText:messageText(msg?.message,type),media:null,persistenceStatus:'pending'};const c=classify(e);e.eligibleForFollowup=c.eligible;e.ignoreReason=c.reason;e.dedupeKey=`${s.sessionId}:${e.messageId||'sem-id'}`;if(!pushEvent(s,e))continue;if(e.eligibleForFollowup&&MEDIA_TYPES[type])await captureMedia(s,msg,e);if(e.eligibleForFollowup&&SUPABASE_SERVICE_KEY)await persistEventDirect(s,e)}}
 async function connect(s){if(s.starting)return s.starting;if(s.sock&&s.state.connected)return statusPayload(s);s.starting=(async()=>{patch(s,{phase:'starting',connected:false,lastError:null});await fs.mkdir(s.authDir,{recursive:true});const{state:auth,saveCreds}=await useMultiFileAuthState(s.authDir);const sock=makeWASocket({
   auth,
   browser:Browsers.windows('Desktop'),
