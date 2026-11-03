@@ -1,0 +1,41 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<div class="actionbar"><span class="actionbar-scr"></span></div>
+<div id="crm-progress-bar"></div>
+<nav class="nav"></nav>
+<div class="page" id="page-leads"></div>
+<div class="page" id="page-kanban"></div>
+<div class="page" id="page-dashboard"></div>
+<div class="page" id="page-import"></div>
+<div class="page" id="page-exportar"></div>
+<div class="page" id="page-quentes"></div>
+<div class="page" id="page-retomar"></div>
+<div class="page" id="page-followup"></div>
+<div class="page" id="page-relatorio"></div>
+<div class="page" id="page-script"></div>
+<table><thead><tr id="leads-thead"><th>Nome</th><th>Responsável</th><th>Contato</th><th>Status</th><th>Valor</th><th>Origem</th><th>Perfil</th><th>Região</th><th>Ações</th></tr></thead><tbody id="tbody"></tbody></table>
+<input id="search-leads"><input id="search-notas"><select id="filterStatus"></select><select id="filterPerfil"></select><select id="filterOrigem"></select><input id="search-regiao">
+<div id="overlay"></div><input id="f-nome"><input id="f-tel"><select id="f-status"></select><button id="save-btn"></button>
+<table><tbody id="fu-tbody"></tbody></table><input id="fu-busca"><select id="fu-resp"></select><select id="fu-prio"></select>
+<script>
+window.showPage=function(){};window.renderAll=function(){};window.refreshCRM=function(){};window.openModal=function(){};window.closeModal=function(){};window.saveLead=function(){};window.showToast=function(){};
+window.CRM_SUPABASE={config:{url:'https://example.supabase.co',projectRef:'test',schema:'crm'}};
+window.CRM_FOLLOWUP={};
+window.TM_SUPABASE_AUTH_CLIENT={auth:{getSession:async()=>({data:{session:{user:{id:'test-user'}}}})},from:()=>({select:()=>({limit:async()=>({data:[],error:null})}),insert:()=>({select:()=>({single:async()=>({data:{id:'r1',created_at:new Date().toISOString()},error:null})})})})};
+window.TM_WA_RUNTIME={gateway:()=> 'https://gateway.example',token:()=> 'token',api:async(path)=>path.includes('candidates')?{mode:'hosted',count:0,mediaPersistence:'gateway-direct',directPersistence:true}:{sessions:[]}};
+window.__TM_WHATSAPP_PRODUCTION_READY__=true;
+['tm-wa-runtime','tm-wa-followup','tm-wa-matching','tm-wa-history-range','tm-wa-archive','tm-wa-bridge-hosted','tm-wa-followup-hosted','tm-wa-connections','tm-wa-hosted-media-compat','tm-wa-storage','tm-wa-media','tm-wa-archive-hotfix'].forEach(id=>{const s=document.createElement('script');s.id=id;document.head.appendChild(s)});
+</script>
+<script src="../taurus-regression-core.js"></script>
+<script src="../taurus-regression-panel.js"></script>
+<script>
+setTimeout(()=>{
+ const btn=document.getElementById('tm-reg-btn');
+ const api=window.TAURUS_REGRESSION;
+ const count=api?api.list().length:0;
+ const ok=!!btn&&!!api&&count>=60&&api.cells().length>=8;
+ document.body.setAttribute('data-result',ok?'PASS':'FAIL');
+ document.body.setAttribute('data-tests',String(count));
+ document.body.insertAdjacentHTML('beforeend','<div id="result">'+(ok?'PASS':'FAIL')+' '+count+'</div>');
+},100);
+</script>
+</body></html>
