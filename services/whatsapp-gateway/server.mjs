@@ -227,7 +227,7 @@ function userSessions(userId){return[...sessions.values()].filter(s=>s.userId===
 
 app.get('/health',(_req,res)=>res.json({ok:true,service:'taurus-whatsapp-gateway',mode:'hosted-multisession',version:GATEWAY_VERSION,sessions:sessions.size,directPersistence:Boolean(SUPABASE_SERVICE_KEY),dataRoot:DATA_ROOT,adminSessionView:true,staging:STAGING_MODE}));
 if(STAGING_MODE){
-  app.get('/staging',(_req,res)=>res.sendFile(path.join(process.cwd(),'staging.html')));
+  app.get('/staging',(_req,res)=>{res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');res.set('Pragma','no-cache');res.set('Expires','0');res.sendFile(path.join(process.cwd(),'staging.html'))});
   app.use('/api/staging',authMw);
   app.post('/api/staging/test-lead',async(req,res)=>{
     try{
