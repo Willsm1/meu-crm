@@ -5,7 +5,7 @@ import pino from 'pino';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import makeWASocket, { Browsers, DisconnectReason, useMultiFileAuthState, downloadContentFromMessage } from 'baileys';
-import { classifyEvent, disconnectPolicy, phoneFromJid, phoneFromMessageKey as resolvePhoneFromMessageKey, shouldSyncHistory } from './core.mjs';
+import { classifyEvent, disconnectPolicy, phoneFromJid, phoneFromMessageKey as resolvePhoneFromMessageKey, shouldSyncHistory, historyBackfillPlan } from './core.mjs';
 import { downloadMediaBuffer, shouldCleanupLocalMedia } from './media-core.mjs';
 
 const PORT=Number(process.env.PORT||8787);
@@ -35,7 +35,7 @@ function key(userId,slot){return `${userId}:${slot}`}
 function createSession(userId,slot){return{userId,slot,sessionId:publicId(userId,slot),authDir:path.join(AUTH_ROOT,userId,slot),mediaDir:path.join(MEDIA_ROOT,userId,slot),sock:null,starting:null,reconnectTimer:null,events:[],seenMessageIds:new Set(),seenMessageOrder:[],lidPnMap:new Map(),catchupRequested:new Map(),backfill:null,state:{phase:'idle',connected:false,qr:null,qrDataUrl:null,user:null,lastError:null,updatedAt:new Date().toISOString()}}}
 function getSession(userId,slot){slot=cleanSlot(slot);const k=key(userId,slot);if(!sessions.has(k))sessions.set(k,createSession(userId,slot));return sessions.get(k)}
 function patch(s,next){s.state={...s.state,...next,updatedAt:new Date().toISOString()}}
-function statusPayload(s){return{slot:s.slot,sessionId:s.sessionId,phase:s.state.phase,connected:s.state.connected,qrDataUrl:s.state.qrDataUrl,user:s.state.user,lastError:s.state.lastError,eventCount:s.events.length,followupCandidateCount:s.events.filter(e=>e.eligibleForFollowup).length,directPersistence:Boolean(SUPABASE_SERVICE_KEY),updatedAt:s.state.updatedAt}}
+function statusPayload(s){return{slot:s.slot,sessionId:s.sessionId,phase:s.state.phase,connected:s.state.connected,qrDataUrl:s.state.qrDataUrl,user:s.state.user,lastError:s.state.lastError,eventCount:s.events.length,followupCandidateCount:s.events.filter(e=>e.eligibleForFollowup).length,directPersistence:Boolean(SUPABASE_SERVICE_KEY),backfill:s.backfill?{enabled:Boolean(s.backfill.enabled),manual:Boolean(s.backfill.manual),cutoffMs:s.backfill.cutoffMs||null,latestMs:s.backfill.latestMs||null,completedAt:s.backfill.completedAt||null}:null,updatedAt:s.state.updatedAt}}
 function adminStatusPayload(s){const p=statusPayload(s);p.qrDataUrl=null;return p}
 function asEpochMs(v){if(v==null)return null;if(typeof v==='number')return v>1e12?v:v*1000;if(typeof v==='bigint')return Number(v)*1000;if(typeof v==='string'){const n=Number(v);return Number.isFinite(n)?(n>1e12?n:n*1000):null}if(typeof v?.toNumber==='function')return v.toNumber()*1000;const n=Number(v);return Number.isFinite(n)?(n>1e12?n:n*1000):null}
 function rememberLidPn(s,lid,pn){
@@ -111,14 +111,7 @@ async function latestPersistedMessageMs(sessionId){
 }
 async function backfillPlan(s){
   const latest=await latestPersistedMessageMs(s.sessionId);
-  const now=Date.now();
-  const floor=now-7*24*60*60*1000;
-  if(s.forceBackfill===true){
-    return{enabled:true,cutoffMs:floor,latestMs:latest,manual:true}
-  }
-  const cutoff=Math.max(floor,(latest||floor)-12*60*60*1000);
-  const gap=latest?now-latest:7*24*60*60*1000;
-  return{enabled:gap>15*60*1000,cutoffMs:cutoff,latestMs:latest,manual:false}
+  return historyBackfillPlan(latest,Date.now(),{force:s.forceBackfill===true});
 }
 async function uploadAsService(storagePath,buf,mime){if(!SUPABASE_SERVICE_KEY)throw new Error('service role ausente');const r=await fetch(`${SUPABASE_URL}/storage/v1/object/whatsapp-media/${encPath(storagePath)}`,{method:'POST',headers:{apikey:SUPABASE_SERVICE_KEY,Authorization:`Bearer ${SUPABASE_SERVICE_KEY}`,'Content-Type':mime||'application/octet-stream','x-upsert':'true'},body:buf});const text=await r.text();if(!r.ok)throw new Error(`storage ${r.status}: ${text.slice(0,240)}`);return text}
 async function persistEventDirect(s,e){
@@ -153,14 +146,14 @@ if(upsertType==='notify'&&msgTs&&s.backfill?.latestMs&&Date.now()-s.backfill.lat
     }).catch(err=>logger.warn({err,sessionId:s.sessionId,chatJid:chatKey},'on-demand WhatsApp catch-up failed'))
   }
 }}}
-async function connect(s){if(s.starting)return s.starting;if(s.sock&&s.state.connected)return statusPayload(s);s.starting=(async()=>{patch(s,{phase:'starting',connected:false,lastError:null});await fs.mkdir(s.authDir,{recursive:true});const{state:auth,saveCreds}=await useMultiFileAuthState(s.authDir);const isRegistered=Boolean(auth?.creds?.registered);const hasMe=Boolean(auth?.creds?.me);const isPaired=isRegistered||hasMe;logger.warn({sessionId:s.sessionId,registered:isRegistered,hasMe,isPaired},'WhatsApp auth state loaded');s.backfill={enabled:false,cutoffMs:0,latestMs:await latestPersistedMessageMs(s.sessionId),manual:false,pairing:!isPaired};s.forceBackfill=false;const sock=makeWASocket({
+async function connect(s){if(s.starting)return s.starting;if(s.sock&&s.state.connected)return statusPayload(s);s.starting=(async()=>{patch(s,{phase:'starting',connected:false,lastError:null});await fs.mkdir(s.authDir,{recursive:true});const{state:auth,saveCreds}=await useMultiFileAuthState(s.authDir);const isRegistered=Boolean(auth?.creds?.registered);const hasMe=Boolean(auth?.creds?.me);const isPaired=isRegistered||hasMe;logger.warn({sessionId:s.sessionId,registered:isRegistered,hasMe,isPaired},'WhatsApp auth state loaded');s.backfill=isPaired?await backfillPlan(s):{enabled:false,cutoffMs:0,latestMs:null,manual:false,pairing:true};const historyMode=isPaired&&Boolean(s.backfill?.enabled);logger.warn({sessionId:s.sessionId,historyMode,manual:Boolean(s.backfill?.manual),cutoffMs:s.backfill?.cutoffMs,latestMs:s.backfill?.latestMs},'WhatsApp connection mode selected');s.forceBackfill=false;const sock=makeWASocket({
   auth,
   browser:Browsers.windows('Desktop'),
-  // Sessão nova/desregistrada deve seguir o fluxo puro de pareamento.
-  // Backfill e init queries só podem ser ativados depois que o WhatsApp já estiver registrado.
-  syncFullHistory:shouldSyncHistory('realtime'),
-  shouldSyncHistoryMessage:()=>shouldSyncHistory('realtime'),
-  fireInitQueries:false,
+  // Em sessão já pareada, gaps reais de persistência ativam uma sincronização limitada.
+  // O WhatsApp decide o lote que entrega; o Taurus filtra e persiste somente a janela de até 7 dias.
+  syncFullHistory:shouldSyncHistory(historyMode?'history':'realtime'),
+  shouldSyncHistoryMessage:()=>shouldSyncHistory(historyMode?'history':'realtime'),
+  fireInitQueries:historyMode,
   markOnlineOnConnect:false,
   printQRInTerminal:false,
   // Grupos, Status e newsletters nunca são candidatos a follow-up no Taurus.
@@ -226,7 +219,7 @@ async function persistEventMedia(req,s,e){
     logger.info({sessionId:e.sessionId,messageId:e.messageId,storagePath},'media persisted to Supabase');
   }catch(err){e.media.supabaseStatus='error';e.media.persistError=err?.message||String(err);logger.warn({err,sessionId:e.sessionId,messageId:e.messageId},'media Supabase persistence failed')}
 }
-function candidateView(e){return{sessionId:e.sessionId,slot:e.slot,messageId:e.messageId,dedupeKey:e.dedupeKey,direction:e.direction,messageTimestampMs:e.messageTimestampMs,receivedAtMs:e.receivedAtMs,messageType:e.messageType,messageText:e.messageText,chatJid:e.chatJid,chatJidAlt:e.chatJidAlt,contactPhone:e.contactPhone,eligibleForFollowup:e.eligibleForFollowup,ignoreReason:e.ignoreReason,persistenceStatus:e.persistenceStatus||null,media:e.media?{...e.media,url:null}:null}}
+function candidateView(e){return{sessionId:e.sessionId,slot:e.slot,messageId:e.messageId,dedupeKey:e.dedupeKey,direction:e.direction,messageTimestampMs:e.messageTimestampMs,receivedAtMs:e.receivedAtMs,messageType:e.messageType,messageText:e.messageText,chatJid:e.chatJid,chatJidAlt:e.chatJidAlt,contactPhone:e.contactPhone,upsertType:e.upsertType||null,live:Boolean(e.live),historyBackfill:Boolean(e.backfillEligible),eligibleForFollowup:e.eligibleForFollowup,ignoreReason:e.ignoreReason,persistenceStatus:e.persistenceStatus||null,media:e.media?{...e.media,url:null}:null}}
 function userSessions(userId){return[...sessions.values()].filter(s=>s.userId===userId)}
 
 app.get('/health',(_req,res)=>res.json({ok:true,service:'taurus-whatsapp-gateway',mode:'hosted-multisession',version:GATEWAY_VERSION,sessions:sessions.size,directPersistence:Boolean(SUPABASE_SERVICE_KEY),dataRoot:DATA_ROOT,adminSessionView:true}));
@@ -237,8 +230,12 @@ app.get('/api/whatsapp/sessions/:slot/status',(req,res)=>{try{res.json(statusPay
 app.post('/api/whatsapp/sessions/:slot/backfill',async(req,res)=>{
   try{
     const s=getSession(req.taurusUser.id,req.params.slot);
-    logger.warn({userId:req.taurusUser.id,slot:req.params.slot,sessionId:s.sessionId,connected:Boolean(s.state.connected)},'manual 7-day backfill requested but unavailable on stable session');
-    res.status(409).json({ok:false,error:'Recuperação retroativa não disponível nesta sessão sem novo pareamento. A conexão em tempo real foi preservada.'})
+    s.forceBackfill=true;
+    const plan=await backfillPlan(s);
+    s.backfill=plan;
+    logger.warn({userId:req.taurusUser.id,slot:req.params.slot,sessionId:s.sessionId,connected:Boolean(s.state.connected),cutoffMs:plan.cutoffMs},'manual 7-day backfill armed');
+    if(!s.state.connected){await connect(s);return res.json({ok:true,mode:'automatic-on-connect',...statusPayload(s)})}
+    res.json({ok:true,mode:'armed-for-next-reconnect',message:'Recuperação de até 7 dias preparada. Se a sessão reconectar, o histórico elegível será importado automaticamente.',...statusPayload(s)})
   }catch(err){
     res.status(500).json({ok:false,error:err.message||String(err)})
   }
