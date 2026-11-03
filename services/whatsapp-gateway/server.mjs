@@ -140,7 +140,11 @@ if(s.backfill?.enabled){
   sock.ev.on('messaging-history.set',h=>{
     const msgs=Array.isArray(h?.messages)?h.messages:[];
     captureUpsert(s,{type:'append',messages:msgs}).then(()=>{
-      logger.warn({sessionId:s.sessionId,count:msgs.length,cutoffMs:s.backfill?.cutoffMs},'WhatsApp backfill batch processed')
+      logger.warn({sessionId:s.sessionId,count:msgs.length,cutoffMs:s.backfill?.cutoffMs,isLatest:Boolean(h?.isLatest),progress:h?.progress||null},'WhatsApp backfill batch processed');
+      if(h?.isLatest===true||Number(h?.progress||0)>=100){
+        s.backfill={...(s.backfill||{}),enabled:false,completedAt:Date.now()};
+        patch(s,{phase:'connected'})
+      }
     }).catch(err=>logger.warn({err,sessionId:s.sessionId},'history backfill failed'))
   })
 }
