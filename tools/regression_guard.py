@@ -18,12 +18,22 @@ def require(text, needle, label, count=None):
     elif count is not None and n != count:
         errors.append(f"invariant count mismatch: {label} expected {count}, got {n}")
 
+def forbid(text, needle, label):
+    if needle in text:
+        errors.append(f"forbidden invariant present: {label}")
+
 crm = require_file("crm.html")
 realtime = require_file("supabase-realtime.js")
 duplicates = require_file("duplicates-ui.js")
 actionbar = require_file("actionbar-context-ui.js")
 wa_loader = require_file("whatsapp-production-loader.js")
 wa_media_compat = require_file("crm-whatsapp-hosted-media-compat.js")
+gateway = require_file("services/whatsapp-gateway/server.mjs")
+gateway_core = require_file("services/whatsapp-gateway/core.mjs")
+gateway_media_core = require_file("services/whatsapp-gateway/media-core.mjs")
+gateway_package = require_file("services/whatsapp-gateway/package.json")
+require_file("services/whatsapp-gateway/test/core.test.mjs")
+require_file("services/whatsapp-gateway/test/media-core.test.mjs")
 require_file("supabase-canonical.js")
 require_file("followup-agendar-ui.js")
 require_file("followup-schedule-ui.js")
@@ -74,3 +84,14 @@ if errors:
     sys.exit(1)
 
 print("REGRESSION GUARD: PASS")
+
+# WhatsApp gateway behavioral hardening invariants
+require(gateway, "./core.mjs", "gateway tested core import")
+require(gateway, "./media-core.mjs", "gateway tested media core import")
+require(gateway_core, "disconnectPolicy", "515 restart policy covered")
+require(gateway_core, "classifyEvent", "message classification covered")
+require(gateway_core, "phoneFromMessageKey", "LID/PN phone resolution covered")
+require(gateway_media_core, "downloadMediaBuffer", "media retry helper covered")
+require(gateway_media_core, "shouldCleanupLocalMedia", "safe media cleanup policy covered")
+require(gateway_package, '"test": "node --test test/*.test.mjs"', "gateway test command")
+forbid(gateway, "oneTimeResetWillSession", "hard-coded production WhatsApp auth reset")
