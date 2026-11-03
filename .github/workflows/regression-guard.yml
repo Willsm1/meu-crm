@@ -63,6 +63,33 @@ jobs:
             echo "$OUT" | grep -o 'data-result="[A-Z]*"[^>]*' || true
             exit 1
           fi
+      - name: WhatsApp conversation browser smoke
+        run: |
+          python3 -m http.server 8767 --bind 127.0.0.1 >/tmp/tm-wa-chat-http.log 2>&1 &
+          SERVER=$!
+          trap 'kill $SERVER || true' EXIT
+          for i in {1..50}; do
+            if curl -fsS http://127.0.0.1:8767/tools/whatsapp_conversation_harness.html >/dev/null; then break; fi
+            sleep 0.2
+          done
+          if ! curl -fsS http://127.0.0.1:8767/tools/whatsapp_conversation_harness.html >/dev/null; then
+            cat /tmp/tm-wa-chat-http.log || true
+            exit 1
+          fi
+          CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME" ]; then
+            echo "Chrome/Chromium not available on runner"
+            exit 1
+          fi
+          OUT="$($CHROME --headless --no-sandbox --disable-gpu --virtual-time-budget=2500 --dump-dom http://127.0.0.1:8767/tools/whatsapp_conversation_harness.html)"
+          if echo "$OUT" | grep -q 'data-result="PASS"'; then
+            echo 'WHATSAPP_CONVERSATION: PASS'
+          else
+            echo 'WHATSAPP_CONVERSATION: FAIL'
+            echo "$OUT" | grep -o 'data-result="[A-Z]*"[^>]*' || true
+            exit 1
+          fi
+
       - name: Follow-up browser smoke
         run: |
           python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/tm-http.log 2>&1 &

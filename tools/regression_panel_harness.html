@@ -23,7 +23,9 @@ window.CRM_FOLLOWUP={};
 window.TM_SUPABASE_AUTH_CLIENT={auth:{getSession:async()=>({data:{session:{user:{id:'test-user'}}}})},from:()=>({select:()=>({limit:async()=>({data:[],error:null})}),insert:()=>({select:()=>({single:async()=>({data:{id:'r1',created_at:new Date().toISOString()},error:null})})})})};
 window.TM_WA_RUNTIME={gateway:()=> 'https://gateway.example',token:()=> 'token',api:async(path)=>path.includes('candidates')?{mode:'hosted',count:0,mediaPersistence:'gateway-direct',directPersistence:true}:{sessions:[]}};
 window.__TM_WHATSAPP_PRODUCTION_READY__=true;
-['tm-wa-runtime','tm-wa-followup','tm-wa-matching','tm-wa-history-range','tm-wa-archive','tm-wa-bridge-hosted','tm-wa-followup-hosted','tm-wa-connections','tm-wa-hosted-media-compat','tm-wa-storage','tm-wa-media','tm-wa-archive-hotfix'].forEach(id=>{const s=document.createElement('script');s.id=id;document.head.appendChild(s)});
+window.TM_WA_HISTORY_UI={openLeadHistory:function(){},openGlobalHistory:function(){},range:function(){return{from:new Date(),to:new Date()}}};
+window.TM_WA_LIVE_NOTIFICATIONS={show:function(){}};
+['tm-wa-runtime','tm-wa-followup','tm-wa-matching','tm-wa-history-range','tm-wa-archive','tm-wa-bridge-hosted','tm-wa-followup-hosted','tm-wa-connections','tm-wa-live-notifications','tm-wa-hosted-media-compat','tm-wa-storage','tm-wa-media','tm-wa-archive-hotfix'].forEach(id=>{const s=document.createElement('script');s.id=id;document.head.appendChild(s)});
 </script>
 <script src="../taurus-regression-core.js"></script>
 <script src="../taurus-regression-panel.js"></script>
