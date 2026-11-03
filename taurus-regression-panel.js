@@ -35,9 +35,17 @@ function css(){
 `;document.head.appendChild(s);
 }
 function button(){
-  const a=$('.actionbar-scr')||$('.actionbar');if(!a)return;
+  const nav=$('.nav');if(!nav)return;
   if($('#tm-reg-btn'))return;
-  const b=document.createElement('button');b.className='nav-btn';b.id='tm-reg-btn';b.title='Executar suíte completa Anti-Regressão';b.innerHTML='<i class="ti ti-shield-check"></i> Anti-Regressão';b.onclick=open;a.appendChild(b);
+  const b=document.createElement('button');
+  b.className='nav-btn';
+  b.id='tm-reg-btn';
+  b.title='Executar suíte completa Anti-Regressão';
+  b.setAttribute('aria-label','Anti-Regressão');
+  b.innerHTML='<i class="ti ti-shield-check"></i> Anti-Regressão';
+  b.onclick=open;
+  const anchor=$('#cfg-abas',nav)||$('#sessao-box',nav);
+  if(anchor)nav.insertBefore(b,anchor);else nav.appendChild(b);
 }
 function ensure(){
   if($('#tm-reg-overlay'))return;
