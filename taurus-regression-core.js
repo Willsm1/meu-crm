@@ -6,9 +6,12 @@ if(window.TAURUS_REGRESSION)return;
 const cells=new Map();
 const tests=[];
 const runtimeErrors=[];
-const VERSION='2026-11-03.4';
+const VERSION='2026-11-03.5';
 
 function now(){return Date.now()}
+function makeRunId(){
+  try{return crypto.randomUUID()}catch(_e){return 'tm-'+Date.now()+'-'+Math.random().toString(16).slice(2)}
+}
 function safeString(v){try{return typeof v==='string'?v:JSON.stringify(v)}catch(_e){return String(v)}}
 function errMsg(e){return String(e&&e.message||e||'erro desconhecido')}
 function registerCell(cell){
@@ -68,7 +71,7 @@ async function directInsertRegression(payload){
       'Content-Type':'application/json',
       'Accept-Profile':cfg.schema||'crm',
       'Content-Profile':cfg.schema||'crm',
-      'Prefer':'return=representation'
+      'Prefer':'resolution=merge-duplicates,return=representation'
     },
     body:JSON.stringify(payload)
   });
@@ -115,6 +118,7 @@ async function runOne(t,mode){
 }
 async function persist(report){
   const payload={
+    id:report.runId,
     source:'crm_panel',
     status:report.failed>0?'failed':(report.skipped>0?'partial':'passed'),
     passed:report.passed,
@@ -128,7 +132,7 @@ async function persist(report){
   let primaryError=null;
   try{
     const cli=await waitSupabaseClient();
-    const out=await cli.from('regression_runs').insert(payload).select('id,created_at').single();
+    const out=await cli.from('regression_runs').upsert(payload,{onConflict:'id'}).select('id,created_at').single();
     if(out.error)throw out.error;
     return {ok:true,via:'client',id:out.data.id,createdAt:out.data.created_at};
   }catch(e){primaryError=errMsg(e)}
@@ -154,6 +158,7 @@ async function runAll(options){
   const failed=results.filter(r=>r.status==='failed').length;
   const skipped=results.filter(r=>r.status==='skipped').length;
   const report={
+    runId:makeRunId(),
     version:VERSION,
     runAt:new Date().toISOString(),
     mode:o.mode,
@@ -169,14 +174,37 @@ async function runAll(options){
       runtimeErrors:runtimeErrors.slice(-20)
     }
   };
-  try{localStorage.setItem('tm_regression_last_report',JSON.stringify(report))}catch(_e){}
+  try{
+    localStorage.setItem('tm_regression_last_report',JSON.stringify(report));
+    if(o.persist)localStorage.setItem('tm_regression_pending_report',JSON.stringify(report));
+  }catch(_e){}
   if(o.persist){
     report.persistence=await persist(report);
+    if(report.persistence&&report.persistence.ok){
+      try{localStorage.removeItem('tm_regression_pending_report')}catch(_e){}
+    }
     try{localStorage.setItem('tm_regression_last_report',JSON.stringify(report))}catch(_e){}
   }
   window.__TAURUS_LAST_REGRESSION_REPORT__=report;
   document.dispatchEvent(new CustomEvent('taurus:regression-complete',{detail:report}));
   return report;
+}
+async function flushPendingReport(){
+  let pending=null;
+  try{
+    const raw=localStorage.getItem('tm_regression_pending_report');
+    pending=raw?JSON.parse(raw):null;
+  }catch(_e){}
+  if(!pending||!pending.runId)return {ok:true,empty:true};
+  const result=await persist(pending);
+  if(result&&result.ok){
+    try{
+      pending.persistence=result;
+      localStorage.setItem('tm_regression_last_report',JSON.stringify(pending));
+      localStorage.removeItem('tm_regression_pending_report');
+    }catch(_e){}
+  }
+  return result;
 }
 function resetTestState(){
   const removed=[];
@@ -195,6 +223,7 @@ window.TAURUS_REGRESSION={
   cells:()=>Array.from(cells.values()),
   last:()=>window.__TAURUS_LAST_REGRESSION_REPORT__||null,
   resetTestState,
+  flushPendingReport,
   runtimeErrors
 };
 
@@ -284,5 +313,6 @@ registerTest('safety',{id:'no-runtime-errors',label:'Nenhum erro JS acionável c
 registerTest('safety',{id:'no-test-prod-reset',label:'Painel não expõe reset global de produção',run:({assert})=>{const s=String(window.TAURUS_REGRESSION.resetTestState);assert(!/whatsapp.*remove|auth.*reset|leads\s*=\s*\[\]/i.test(s),'reset de teste contém ação destrutiva');return {details:'reset limitado a fixtures tm_regression_fixture_*'}}});
 registerTest('safety',{id:'report-table',label:'Relatórios persistem fora dos dados comerciais',source:'crm.regression_runs',run:async({supaRead})=>{await supaRead('regression_runs','id');return {details:'canal isolado disponível'}}});
 
+setTimeout(()=>{flushPendingReport().then(r=>document.dispatchEvent(new CustomEvent('taurus:regression-pending-flush',{detail:r}))).catch(()=>{})},1500);
 document.dispatchEvent(new CustomEvent('taurus:regression-ready'));
 })();
