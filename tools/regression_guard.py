@@ -83,6 +83,8 @@ require(wa_media_compat, 'getLeadAssets', 'stored media hydration preserved')
 require(actionbar, "taurus-regression-core.js?v='+Date.now()", "anti-regression cache busting")
 require(regression_core, "waitSupabaseClient", "Supabase readiness wait in regression runner")
 require(regression_core, "directInsertRegression", "REST fallback for regression report persistence")
+require(regression_core, "flushPendingReport", "queued retry for unsaved regression reports")
+require(regression_core, "tm_regression_pending_report", "pending regression report local queue")
 
 require(actionbar, "taurus-regression-core.js", "anti-regression core loader")
 require(actionbar, "taurus-regression-panel.js", "anti-regression panel loader")
