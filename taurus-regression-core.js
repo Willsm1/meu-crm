@@ -6,7 +6,7 @@ if(window.TAURUS_REGRESSION)return;
 const cells=new Map();
 const tests=[];
 const runtimeErrors=[];
-const VERSION='2026-11-03.2';
+const VERSION='2026-11-03.3';
 
 function now(){return Date.now()}
 function safeString(v){try{return typeof v==='string'?v:JSON.stringify(v)}catch(_e){return String(v)}}
@@ -35,9 +35,17 @@ function withTimeout(p,ms,label){
     new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout '+(label||'')+' após '+ms+'ms')),ms))
   ]);
 }
+async function waitSupabaseClient(timeoutMs=5000){
+  const started=Date.now();
+  while(Date.now()-started<timeoutMs){
+    const cli=window.TM_SUPABASE_AUTH_CLIENT;
+    if(cli&&cli.auth&&typeof cli.from==='function')return cli;
+    await new Promise(r=>setTimeout(r,100));
+  }
+  throw new Error('cliente Supabase indisponível após '+timeoutMs+'ms');
+}
 async function supaRead(table,select='*'){
-  const cli=window.TM_SUPABASE_AUTH_CLIENT;
-  if(!cli)throw new Error('cliente Supabase indisponível');
+  const cli=await waitSupabaseClient();
   const q=cli.from(table).select(select).limit(1);
   const out=await q;
   if(out.error)throw out.error;
@@ -73,8 +81,7 @@ async function runOne(t,mode){
 }
 async function persist(report){
   try{
-    const cli=window.TM_SUPABASE_AUTH_CLIENT;
-    if(!cli)return {ok:false,error:'Supabase indisponível'};
+    const cli=await waitSupabaseClient();
     const payload={
       source:'crm_panel',
       status:report.failed>0?'failed':(report.skipped>0?'partial':'passed'),
@@ -211,8 +218,8 @@ registerTest('followup',{id:'view-readable',label:'View v_followup legível no S
 
 /* Supabase */
 registerTest('supabase',{id:'config',label:'Configuração Supabase presente',source:'CRM_SUPABASE.config',run:({assert})=>{const c=window.CRM_SUPABASE&&window.CRM_SUPABASE.config;assert(c&&c.url&&c.projectRef&&c.schema,'configuração Supabase incompleta');return {details:c.projectRef+' · schema '+c.schema}}});
-registerTest('supabase',{id:'auth-client',label:'Cliente autenticado disponível',run:({assert})=>assert(!!window.TM_SUPABASE_AUTH_CLIENT,'TM_SUPABASE_AUTH_CLIENT ausente')});
-registerTest('supabase',{id:'session',label:'Sessão Supabase válida',run:async({assert})=>{const c=window.TM_SUPABASE_AUTH_CLIENT;assert(c&&c.auth,'cliente auth ausente');const out=await c.auth.getSession();if(out.error)throw out.error;assert(out.data&&out.data.session&&out.data.session.user,'sessão ausente');return {details:'user '+out.data.session.user.id}}});
+registerTest('supabase',{id:'auth-client',label:'Cliente autenticado disponível',run:async({assert})=>{const cli=await waitSupabaseClient();assert(!!cli,'TM_SUPABASE_AUTH_CLIENT ausente');return {details:'cliente autenticado pronto'}}});
+registerTest('supabase',{id:'session',label:'Sessão Supabase válida',run:async({assert})=>{const c=await waitSupabaseClient();assert(c&&c.auth,'cliente auth ausente');const out=await c.auth.getSession();if(out.error)throw out.error;assert(out.data&&out.data.session&&out.data.session.user,'sessão ausente');return {details:'user '+out.data.session.user.id}}});
 registerTest('supabase',{id:'leads-read',label:'Tabela leads legível',source:'crm.leads',run:async({supaRead})=>({details:'leitura ok · '+(await supaRead('leads','id')).length+' amostra(s)'})});
 registerTest('supabase',{id:'interactions-read',label:'Tabela interactions legível',source:'crm.interactions',run:async({supaRead})=>({details:'leitura ok · '+(await supaRead('interactions','id')).length+' amostra(s)'})});
 registerTest('supabase',{id:'regression-runs-read',label:'Canal de relatórios legível',source:'crm.regression_runs',run:async({supaRead})=>({details:'leitura ok · '+(await supaRead('regression_runs','id')).length+' amostra(s)'})});
