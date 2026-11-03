@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Taurus WhatsApp Staging</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,Arial,sans-serif}body{margin:0;background:#0b141a;color:#e9edef}main{max-width:1100px;margin:0 auto;padding:24px}.grid{display:grid;grid-template-columns:360px 1fr;gap:16px}@media(max-width:850px){.grid{grid-template-columns:1fr}}.card{background:#111b21;border:1px solid #233138;border-radius:14px;padding:16px}.row{display:flex;gap:8px;flex-wrap:wrap}.field{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}.field label{font-size:12px;color:#aebac1}.field input{height:38px;border-radius:8px;border:1px solid #2a3942;background:#202c33;color:#fff;padding:0 10px}.btn{height:38px;border:0;border-radius:8px;padding:0 12px;background:#2a3942;color:#e9edef;font-weight:700;cursor:pointer}.btn.primary{background:#00a884;color:#061b16}.btn.warn{background:#9a6700}.btn.danger{background:#8a1c1c}.status{font-size:12px;color:#aebac1;line-height:1.45;white-space:pre-wrap}.qr{width:280px;max-width:100%;background:#fff;padding:8px;border-radius:10px;display:none;margin:12px auto}.chat{background:#0b141a;min-height:500px;max-height:70vh;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:6px}.msg{max-width:76%;padding:8px 10px;border-radius:8px;box-shadow:0 1px 1px #0006}.in{align-self:flex-start;background:#202c33}.out{align-self:flex-end;background:#005c4b}.meta{font-size:9px;color:#aebac1;text-align:right;margin-top:4px}.media{max-width:330px;max-height:280px;border-radius:7px}.audio{width:300px;max-width:100%}.muted{color:#8696a0;font-size:11px}.ok{color:#6ee7b7}.bad{color:#fca5a5}h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:0 0 12px}.sep{height:1px;background:#233138;margin:14px 0}
+</style>
+</head>
+<body><main>
+<h1>Taurus Magnum · WhatsApp Staging</h1>
+<div class="muted">Ambiente isolado. Use apenas números e mensagens de teste.</div>
+<div class="grid" style="margin-top:16px">
+<section class="card">
+<h2>1. Acesso e contato de teste</h2>
+<div class="field"><label>Código de acesso do staging</label><input id="token" type="password" placeholder="cole o código"></div>
+<div class="field"><label>Número do cliente de teste (com DDI)</label><input id="phone" placeholder="5511999999999"></div>
+<div class="field"><label>Nome</label><input id="name" value="Cliente Staging"></div>
+<div class="row"><button class="btn primary" id="saveLead">Preparar contato</button><button class="btn" id="reset">Limpar dados</button></div>
+<div class="sep"></div>
+<h2>2. WhatsApp conectado</h2>
+<div class="row"><button class="btn primary" id="start">Gerar QR / conectar</button><button class="btn" id="refresh">Atualizar status</button></div>
+<img id="qr" class="qr" alt="QR WhatsApp">
+<div id="status" class="status">Aguardando.</div>
+<div class="sep"></div>
+<h2>3. Simular indisponibilidade</h2>
+<div class="muted">Pause o gateway, envie mensagens pelo celular/Web enquanto ele está fora e depois reconecte. O restart recria a sessão em memória usando os arquivos de autenticação e força o backfill de até 7 dias.</div>
+<div class="row" style="margin-top:10px"><button class="btn warn" id="pause">Pausar gateway</button><button class="btn primary" id="restart">Reconectar + recuperar</button></div>
+</section>
+<section class="card">
+<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">Conversa registrada</h2><button class="btn" id="refreshChat">Atualizar conversa</button></div>
+<div id="chat" class="chat"><div class="muted">Prepare o contato e envie mensagens para começar.</div></div>
+</section>
+</div>
+</main>
+<script>
+const SLOT='whatsapp-1';
+const $=id=>document.getElementById(id);
+$('token').value=sessionStorage.getItem('tm_stage_token')||'';
+$('phone').value=sessionStorage.getItem('tm_stage_phone')||'';
+function headers(json=true){const t=$('token').value.trim();sessionStorage.setItem('tm_stage_token',t);const h={'X-Taurus-Staging':t};if(json)h['Content-Type']='application/json';return h}
+async function api(path,opt={}){const r=await fetch(path,{...opt,headers:{...headers(opt.body!==undefined),...(opt.headers||{})},cache:'no-store'});const tx=await r.text();let d={};try{d=tx?JSON.parse(tx):{}}catch{d={error:tx}}if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d}
+function phone(){const p=$('phone').value.replace(/\D/g,'');sessionStorage.setItem('tm_stage_phone',p);return p}
+function setStatus(x,bad=false){$('status').className='status '+(bad?'bad':'');$('status').textContent=typeof x==='string'?x:JSON.stringify(x,null,2)}
+async function saveLead(){try{const d=await api('/api/staging/test-lead',{method:'POST',body:JSON.stringify({phone:phone(),name:$('name').value})});setStatus('Contato preparado: '+d.phone);await chat()}catch(e){setStatus(e.message,true)}}
+async function status(){try{const d=await api('/api/whatsapp/sessions/'+SLOT+'/status');const q=d.qrDataUrl;$('qr').style.display=q?'block':'none';if(q)$('qr').src=q;setStatus('fase: '+d.phase+'\nconectado: '+d.connected+'\nnúmero: '+(d.user?.id||'—')+'\neventos: '+(d.eventCount||0)+'\nbackfill: '+(d.backfill?.enabled?'ativo':'inativo')+(d.backfill?.completedAt?' · concluído':'') );return d}catch(e){setStatus(e.message,true)}}
+async function start(){try{const d=await api('/api/whatsapp/sessions/'+SLOT+'/start',{method:'POST',body:'{}'});if(d.qrDataUrl){$('qr').src=d.qrDataUrl;$('qr').style.display='block'}setStatus(d);setTimeout(status,1200)}catch(e){setStatus(e.message,true)}}
+async function pause(){try{setStatus(await api('/api/staging/sessions/'+SLOT+'/pause',{method:'POST',body:'{}'}))}catch(e){setStatus(e.message,true)}}
+async function restart(){try{setStatus('Reconectando e solicitando histórico...');const d=await api('/api/staging/sessions/'+SLOT+'/restart',{method:'POST',body:'{}'});setStatus(d);setTimeout(()=>{status();chat()},1800)}catch(e){setStatus(e.message,true)}}
+function mediaHtml(m){if(!m?.url)return'';if(m.kind==='image'||m.kind==='sticker')return '<img class="media" src="'+m.url+'">';if(m.kind==='video')return '<video class="media" controls src="'+m.url+'"></video>';if(m.kind==='audio')return '<audio class="audio" controls src="'+m.url+'"></audio>';return '<a href="'+m.url+'" target="_blank">Abrir mídia</a>'}
+async function chat(){const p=phone();if(!p)return;try{const d=await api('/api/staging/conversation?phone='+encodeURIComponent(p),{method:'GET'});const media=new Map((d.media||[]).map(x=>[x.session_id+':'+x.message_id,x]));const ev=d.events||[];$('chat').innerHTML=ev.length?ev.map(x=>{const m=media.get(x.session_id+':'+x.message_id);const txt=/^\[(imagem|áudio|vídeo|documento|figurinha)\]$/i.test(x.text||'')&&m?'':('<div>'+(x.text||'[sem texto]')+'</div>');return '<div class="msg '+(x.direction==='inbound'?'in':'out')+'">'+mediaHtml(m)+txt+'<div class="meta">'+new Date(x.at).toLocaleString('pt-BR')+' · '+x.direction+'</div></div>'}).join(''):'<div class="muted">Nenhuma mensagem persistida ainda.</div>';$('chat').scrollTop=$('chat').scrollHeight}catch(e){$('chat').innerHTML='<div class="bad">'+e.message+'</div>'}}
+async function reset(){if(!confirm('Limpar apenas os dados de teste deste staging?'))return;try{await api('/api/staging/reset',{method:'POST',body:'{}'});setStatus('Dados de teste limpos.');await chat()}catch(e){setStatus(e.message,true)}}
+$('saveLead').onclick=saveLead;$('start').onclick=start;$('refresh').onclick=status;$('pause').onclick=pause;$('restart').onclick=restart;$('refreshChat').onclick=chat;$('reset').onclick=reset;
+setInterval(()=>{if($('token').value.trim()){status();if(phone())chat()}},3000);
+</script></body></html>
