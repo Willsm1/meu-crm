@@ -91,7 +91,7 @@ async function captureMedia(s,msg,e){
     logger.warn({err,sessionId:s.sessionId,messageId:e.messageId,kind:spec.kind},'media capture failed')
   }
 }
-function serviceHeaders(extra={}){return{apikey:SUPABASE_SERVICE_KEY,Authorization:`Bearer ${SUPABASE_SERVICE_KEY}`,'Content-Type':'application/json','Accept-Profile':'crm','Content-Profile':'crm',...extra}}
+function serviceHeaders(extra={}){const h={apikey:SUPABASE_SERVICE_KEY,'Content-Type':'application/json','Accept-Profile':'crm','Content-Profile':'crm',...extra};if(!STAGING_MODE)h.Authorization=`Bearer ${SUPABASE_SERVICE_KEY}`;return h}
 async function rpcAsService(name,args={}){if(!SUPABASE_SERVICE_KEY)throw new Error('service role ausente');const r=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{method:'POST',headers:serviceHeaders(),body:JSON.stringify(args)});const text=await r.text();if(!r.ok)throw new Error(`${name} ${r.status}: ${text.slice(0,240)}`);try{return text?JSON.parse(text):null}catch{return text}}
 async function latestPersistedMessageMs(sessionId){
   if(!SUPABASE_SERVICE_KEY)return null;
@@ -116,7 +116,7 @@ async function backfillPlan(s){
   const latest=await latestPersistedMessageMs(s.sessionId);
   return historyBackfillPlan(latest,Date.now(),{force:s.forceBackfill===true});
 }
-async function uploadAsService(storagePath,buf,mime){if(!SUPABASE_SERVICE_KEY)throw new Error('service role ausente');const r=await fetch(`${SUPABASE_URL}/storage/v1/object/whatsapp-media/${encPath(storagePath)}`,{method:'POST',headers:{apikey:SUPABASE_SERVICE_KEY,Authorization:`Bearer ${SUPABASE_SERVICE_KEY}`,'Content-Type':mime||'application/octet-stream','x-upsert':'true'},body:buf});const text=await r.text();if(!r.ok)throw new Error(`storage ${r.status}: ${text.slice(0,240)}`);return text}
+async function uploadAsService(storagePath,buf,mime){if(!SUPABASE_SERVICE_KEY)throw new Error('service role ausente');const h={apikey:SUPABASE_SERVICE_KEY,'Content-Type':mime||'application/octet-stream','x-upsert':'true'};if(!STAGING_MODE)h.Authorization=`Bearer ${SUPABASE_SERVICE_KEY}`;const r=await fetch(`${SUPABASE_URL}/storage/v1/object/whatsapp-media/${encPath(storagePath)}`,{method:'POST',headers:h,body:buf});const text=await r.text();if(!r.ok)throw new Error(`storage ${r.status}: ${text.slice(0,240)}`);return text}
 async function persistEventDirect(s,e){
   if(!SUPABASE_SERVICE_KEY||!e?.eligibleForFollowup||!e.messageId||!e.contactPhone)return;
   try{
