@@ -156,6 +156,19 @@ async function cleanupOldMediaCache(){
   await walk(MEDIA_ROOT);
   if(removed)logger.warn({removed,freedBytes:freed},'old local media cache cleaned');
 }
-async function restore(){await fs.mkdir(AUTH_ROOT,{recursive:true});await fs.mkdir(MEDIA_ROOT,{recursive:true});await cleanupOldMediaCache();const users=await fs.readdir(AUTH_ROOT,{withFileTypes:true}).catch(()=>[]);for(const u of users.filter(x=>x.isDirectory())){const slots=await fs.readdir(path.join(AUTH_ROOT,u.name),{withFileTypes:true}).catch(()=>[]);for(const sl of slots.filter(x=>x.isDirectory())){try{const s=getSession(u.name,sl.name);connect(s).catch(err=>logger.warn({err,sessionId:s.sessionId},'restore failed'))}catch{}}}}
+async function oneTimeResetWillSession(){
+  const marker=path.join(DATA_ROOT,'.reset-will-whatsapp-20261103.done');
+  try{await fs.access(marker);return}catch{}
+  const target=path.join(AUTH_ROOT,'606dee90-b01d-4ab6-8e9a-38f869a9c17c','whatsapp-1');
+  try{
+    await fs.rm(target,{recursive:true,force:true});
+    await fs.mkdir(DATA_ROOT,{recursive:true});
+    await fs.writeFile(marker,new Date().toISOString(),'utf8');
+    logger.warn({target},'one-time reset of corrupted Will WhatsApp session completed');
+  }catch(err){
+    logger.error({err,target},'one-time reset of Will WhatsApp session failed');
+  }
+}
+async function restore(){await fs.mkdir(AUTH_ROOT,{recursive:true});await fs.mkdir(MEDIA_ROOT,{recursive:true});await cleanupOldMediaCache();await oneTimeResetWillSession();const users=await fs.readdir(AUTH_ROOT,{withFileTypes:true}).catch(()=>[]);for(const u of users.filter(x=>x.isDirectory())){const slots=await fs.readdir(path.join(AUTH_ROOT,u.name),{withFileTypes:true}).catch(()=>[]);for(const sl of slots.filter(x=>x.isDirectory())){try{const s=getSession(u.name,sl.name);connect(s).catch(err=>logger.warn({err,sessionId:s.sessionId},'restore failed'))}catch{}}}}
 await restore();
 app.listen(PORT,'0.0.0.0',()=>console.log(`[Taurus WhatsApp Gateway] ${GATEWAY_VERSION} listening on 0.0.0.0:${PORT}`));
