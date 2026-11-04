@@ -404,6 +404,27 @@ app.post('/api/whatsapp/sessions/:slot/backfill',async(req,res)=>{
     res.status(500).json({ok:false,error:err.message||String(err)})
   }
 });
+app.post('/api/whatsapp/sessions/:slot/test-outage',async(req,res)=>{
+  try{
+    if(req.taurusUser.id!=='606dee90-b01d-4ab6-8e9a-38f869a9c17c'||req.params.slot!=='whatsapp-2')return res.status(404).json({ok:false,error:'not found'});
+    const sess=getSession(req.taurusUser.id,req.params.slot);
+    sess.suppressReconnect=true;
+    sess.intentionalRestart=true;
+    if(sess.reconnectTimer)clearTimeout(sess.reconnectTimer);
+    sess.reconnectTimer=null;
+    try{sess.sock?.end?.(new Error('controlled_outage_test'))}catch{}
+    sess.sock=null;
+    patch(sess,{phase:'controlled_outage_test',connected:false,lastError:null});
+    setTimeout(()=>{
+      sess.suppressReconnect=false;
+      sess.intentionalRestart=false;
+      sess.restoredFromDisk=true;
+      connect(sess).catch(err=>patch(sess,{phase:'error',lastError:err.message||String(err)}));
+    },15000);
+    res.json({ok:true,message:'Queda controlada iniciada por 15 segundos.',reconnectInMs:15000,...statusPayload(sess)});
+  }catch(err){res.status(500).json({ok:false,error:err.message||String(err)})}
+});
+
 app.delete('/api/whatsapp/sessions/:slot',(req,res)=>{(async()=>{try{const s=getSession(req.taurusUser.id,req.params.slot);try{await s.sock?.logout()}catch{}if(s.reconnectTimer)clearTimeout(s.reconnectTimer);sessions.delete(key(s.userId,s.slot));await fs.rm(s.authDir,{recursive:true,force:true});await fs.rm(s.mediaDir,{recursive:true,force:true});res.json({ok:true})}catch(err){res.status(500).json({ok:false,error:err.message||String(err)})}})()});
 app.get('/api/whatsapp/followup/candidates',async(req,res)=>{try{const lim=Math.max(1,Math.min(500,Number(req.query.limit||200))),ss=userSessions(req.taurusUser.id),events=ss.flatMap(s=>s.events.filter(e=>e.eligibleForFollowup).map(e=>({s,e})));events.sort((a,b)=>(b.e.messageTimestampMs||b.e.receivedAtMs||0)-(a.e.messageTimestampMs||a.e.receivedAtMs||0));const selected=events.slice(0,lim);await Promise.allSettled(selected.filter(x=>x.e.media?.status==='stored_gateway'&&x.e.media.supabaseStatus!=='stored').map(x=>persistEventMedia(req,x.s,x.e)));const rows=selected.map(x=>candidateView(x.e));res.json({mode:'hosted',writesEnabled:true,directPersistence:Boolean(SUPABASE_SERVICE_KEY),mediaPersistence:SUPABASE_SERVICE_KEY?'gateway-direct':'gateway-to-supabase-on-read',version:GATEWAY_VERSION,count:events.length,candidates:rows})}catch(err){logger.warn({err},'candidate endpoint failed');res.status(500).json({ok:false,error:err.message||String(err)})}});
 app.get('/api/whatsapp/media/:slot/:messageId',async(req,res)=>{try{const s=getSession(req.taurusUser.id,req.params.slot),mid=safeId(req.params.messageId);const files=await fs.readdir(s.mediaDir).catch(()=>[]);const file=files.find(x=>x===mid||x.startsWith(mid+'.'));if(!file)return res.status(404).json({ok:false,error:'media not found'});res.set('Cache-Control','private, max-age=120');res.sendFile(path.join(s.mediaDir,file))}catch(err){res.status(400).json({ok:false,error:err.message||String(err)})}});
