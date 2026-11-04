@@ -14,7 +14,7 @@ const AUTH_ROOT=path.join(DATA_ROOT,'auth');
 const MEDIA_ROOT=path.join(DATA_ROOT,'media');
 const SUPABASE_URL=String(process.env.SUPABASE_URL||'').replace(/\/$/,'');
 const SUPABASE_KEY=process.env.SUPABASE_ANON_KEY||process.env.SUPABASE_PUBLISHABLE_KEY||'';
-const SUPABASE_SERVICE_KEY=process.env.SUPABASE_SERVICE_ROLE_KEY||'';
+const SUPABASE_SERVICE_KEY=process.env.SUPABASE_SERVICE_ROLE_KEY||process.env.SUPABASE_SECRET_KEY||'';
 const ALLOWED_ORIGIN=process.env.TAURUS_ORIGIN||true;
 const MAX_EVENTS=Number(process.env.WA_EVENT_BUFFER||500);
 const MAX_MEDIA_BYTES=Number(process.env.WA_MEDIA_MAX_BYTES||25*1024*1024);
@@ -91,7 +91,7 @@ async function captureMedia(s,msg,e,contentMessage=msg?.message){
     logger.warn({err,sessionId:s.sessionId,messageId:e.messageId,kind:spec.kind},'media capture failed')
   }
 }
-function serviceHeaders(extra={}){const h={apikey:SUPABASE_SERVICE_KEY,'Content-Type':'application/json','Accept-Profile':'crm','Content-Profile':'crm',...extra};if(!STAGING_MODE)h.Authorization=`Bearer ${SUPABASE_SERVICE_KEY}`;return h}
+function serviceHeaders(extra={}){const h={apikey:SUPABASE_SERVICE_KEY,'Content-Type':'application/json','Accept-Profile':'crm','Content-Profile':'crm',...extra};if(!STAGING_MODE&&SUPABASE_SERVICE_KEY&&!SUPABASE_SERVICE_KEY.startsWith('sb_secret_'))h.Authorization=`Bearer ${SUPABASE_SERVICE_KEY}`;return h}
 async function rpcAsService(name,args={}){if(!SUPABASE_SERVICE_KEY)throw new Error('service role ausente');const r=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{method:'POST',headers:serviceHeaders(),body:JSON.stringify(args)});const text=await r.text();if(!r.ok)throw new Error(`${name} ${r.status}: ${text.slice(0,240)}`);try{return text?JSON.parse(text):null}catch{return text}}
 async function latestPersistedMessageMs(sessionId){
   if(!SUPABASE_SERVICE_KEY)return null;
@@ -166,7 +166,7 @@ async function requestRecentConversationCatchup(s,sock,anchors=[]){
     }
   }
 }
-async function uploadAsService(storagePath,buf,mime){if(!SUPABASE_SERVICE_KEY)throw new Error('service role ausente');const h={apikey:SUPABASE_SERVICE_KEY,'Content-Type':mime||'application/octet-stream','x-upsert':'true'};if(!STAGING_MODE)h.Authorization=`Bearer ${SUPABASE_SERVICE_KEY}`;const r=await fetch(`${SUPABASE_URL}/storage/v1/object/whatsapp-media/${encPath(storagePath)}`,{method:'POST',headers:h,body:buf});const text=await r.text();if(!r.ok)throw new Error(`storage ${r.status}: ${text.slice(0,240)}`);return text}
+async function uploadAsService(storagePath,buf,mime){if(!SUPABASE_SERVICE_KEY)throw new Error('service role ausente');const h={apikey:SUPABASE_SERVICE_KEY,'Content-Type':mime||'application/octet-stream','x-upsert':'true'};if(!STAGING_MODE&&!SUPABASE_SERVICE_KEY.startsWith('sb_secret_'))h.Authorization=`Bearer ${SUPABASE_SERVICE_KEY}`;const r=await fetch(`${SUPABASE_URL}/storage/v1/object/whatsapp-media/${encPath(storagePath)}`,{method:'POST',headers:h,body:buf});const text=await r.text();if(!r.ok)throw new Error(`storage ${r.status}: ${text.slice(0,240)}`);return text}
 async function persistEventDirect(s,e){
   if(!SUPABASE_SERVICE_KEY||!e?.eligibleForFollowup||!e.messageId||!e.contactPhone)return;
   try{
