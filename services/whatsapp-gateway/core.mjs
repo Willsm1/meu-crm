@@ -1,5 +1,22 @@
 export const FOLLOWUP_TYPES=new Set(['conversation','extendedTextMessage','imageMessage','videoMessage','audioMessage','documentMessage','stickerMessage','contactMessage','contactsArrayMessage','locationMessage','liveLocationMessage']);
 
+const MESSAGE_WRAPPERS=['ephemeralMessage','viewOnceMessage','viewOnceMessageV2','viewOnceMessageV2Extension','documentWithCaptionMessage'];
+
+export function extractMessageContent(message){
+  let current=message;
+  for(let depth=0;depth<6&&current&&typeof current==='object';depth++){
+    for(const type of FOLLOWUP_TYPES){
+      if(Object.prototype.hasOwnProperty.call(current,type)){
+        return{type,message:current,node:current[type]};
+      }
+    }
+    const wrapper=MESSAGE_WRAPPERS.find(type=>current?.[type]?.message);
+    if(!wrapper)break;
+    current=current[wrapper].message;
+  }
+  return{type:null,message:current||message||null,node:null};
+}
+
 export function phoneFromJid(jid){
   const m=String(jid||'').match(/^(\d+)@s\.whatsapp\.net$/);
   return m?m[1]:null;
