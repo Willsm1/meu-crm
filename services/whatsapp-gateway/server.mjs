@@ -145,21 +145,20 @@ async function recentRecoveryAnchors(s,{maxRows=250,maxChats=25}={}){
     return[];
   }
 }
-async function requestRecentConversationCatchup(s){
-  if(typeof s.sock?.fetchMessageHistory!=='function')return;
-  const anchors=await recentRecoveryAnchors(s);
+async function requestRecentConversationCatchup(s,sock,anchors=[]){
+  if(typeof sock?.fetchMessageHistory!=='function')return;
   logger.warn({sessionId:s.sessionId,count:anchors.length},'active recovery anchors loaded');
   for(const a of anchors){
     try{
       const pnJid=`${a.phone}@s.whatsapp.net`;
       let remoteJid=pnJid,remoteJidAlt=null;
       try{
-        const lid=await s.sock?.signalRepository?.lidMapping?.getLIDForPN?.(pnJid);
+        const lid=await sock?.signalRepository?.lidMapping?.getLIDForPN?.(pnJid);
         if(lid){remoteJid=lid;remoteJidAlt=pnJid;rememberLidPn(s,lid,pnJid)}
       }catch{}
       const key={remoteJid,id:a.messageId,fromMe:a.direction==='outbound'};
       if(remoteJidAlt)key.remoteJidAlt=remoteJidAlt;
-      const requestId=await s.sock.fetchMessageHistory(50,key,Math.floor(a.timestampMs/1000));
+      const requestId=await sock.fetchMessageHistory(50,key,Math.floor(a.timestampMs/1000));
       logger.warn({sessionId:s.sessionId,phone:a.phone,requestId,anchorMessageId:a.messageId},'active recovery history requested');
     }catch(err){
       logger.warn({err,sessionId:s.sessionId,phone:a.phone,anchorMessageId:a.messageId},'active recovery history request failed');
@@ -188,7 +187,7 @@ async function persistEventDirect(s,e){
     logger.info({sessionId:e.sessionId,messageId:e.messageId,storagePath},'event/media persisted directly');
   }catch(err){e.persistenceStatus='error';if(e.media){e.media.supabaseStatus='error';e.media.persistError=err?.message||String(err)}logger.warn({err,sessionId:e.sessionId,messageId:e.messageId},'direct persistence failed')}
 }
-async function captureUpsert(s,upsert){const receivedAt=Date.now(),upsertType=upsert?.type||'unknown';for(const msg of upsert?.messages||[]){const jid=msg?.key?.remoteJid||null;if(!jid)continue;const alt=msg?.key?.remoteJidAlt||null;const type=msg?.message?Object.keys(msg.message)[0]||null:null;const msgTs=asEpochMs(msg?.messageTimestamp);let resolvedPhone=phoneFromMessageKey(msg?.key,s)||phoneFromJid(alt)||null;if(!resolvedPhone&&String(jid).endsWith('@lid')){try{const pn=await s.sock?.signalRepository?.lidMapping?.getPNForLID?.(jid);resolvedPhone=phoneFromJid(pn)||null;if(resolvedPhone)rememberLidPn(s,jid,pn)}catch(err){logger.warn({err,sessionId:s.sessionId,jid},'LID to PN lookup failed')}}if(resolvedPhone){try{const pnJid=`${resolvedPhone}@s.whatsapp.net`;const learnedLid=await s.sock?.signalRepository?.lidMapping?.getLIDForPN?.(pnJid);if(learnedLid)rememberLidPn(s,learnedLid,pnJid)}catch(err){logger.warn({err,sessionId:s.sessionId,resolvedPhone},'PN to LID warmup failed')}}const e={sessionId:s.sessionId,slot:s.slot,source:'messages.upsert',upsertType,live:upsertType==='notify',messageId:msg?.key?.id||null,chatJid:jid,chatJidAlt:alt,contactPhone:resolvedPhone,fromMe:Boolean(msg?.key?.fromMe),direction:msg?.key?.fromMe?'outbound':'inbound',messageTimestampMs:msgTs,receivedAtMs:receivedAt,hasMessage:Boolean(msg?.message),messageType:type,messageText:messageText(msg?.message,type),media:null,persistenceStatus:'pending',backfillEligible:upsertType==='append'&&Boolean(s.backfill?.enabled)&&Boolean(msgTs)&&msgTs>=Number(s.backfill?.cutoffMs||0)};const c=classifyEvent(e);e.eligibleForFollowup=c.eligible;e.ignoreReason=c.reason;e.dedupeKey=`${s.sessionId}:${e.messageId||'sem-id'}`;if(STAGING_MODE&&e.fromMe)logger.warn({sessionId:s.sessionId,messageId:e.messageId,upsertType:e.upsertType,messageType:e.messageType,chatJid:e.chatJid,chatJidAlt:e.chatJidAlt,contactPhone:e.contactPhone,eligible:e.eligibleForFollowup,ignoreReason:e.ignoreReason,messageTimestampMs:e.messageTimestampMs},'staging outbound event observed');if(!pushEvent(s,e))continue;if(e.eligibleForFollowup&&MEDIA_TYPES[type])await captureMedia(s,msg,e);if(e.eligibleForFollowup&&SUPABASE_SERVICE_KEY)await persistEventDirect(s,e);
+async function captureUpsert(s,upsert){const receivedAt=Date.now(),upsertType=upsert?.type||'unknown';for(const msg of upsert?.messages||[]){const jid=msg?.key?.remoteJid||null;if(!jid)continue;const alt=msg?.key?.remoteJidAlt||null;const type=msg?.message?Object.keys(msg.message)[0]||null:null;const msgTs=asEpochMs(msg?.messageTimestamp);let resolvedPhone=phoneFromMessageKey(msg?.key,s)||phoneFromJid(alt)||null;if(!resolvedPhone&&String(jid).endsWith('@lid')){try{const pn=await s.sock?.signalRepository?.lidMapping?.getPNForLID?.(jid);resolvedPhone=phoneFromJid(pn)||null;if(resolvedPhone)rememberLidPn(s,jid,pn)}catch(err){logger.warn({err,sessionId:s.sessionId,jid},'LID to PN lookup failed')}}if(resolvedPhone){try{const pnJid=`${resolvedPhone}@s.whatsapp.net`;const learnedLid=await sock?.signalRepository?.lidMapping?.getLIDForPN?.(pnJid);if(learnedLid)rememberLidPn(s,learnedLid,pnJid)}catch(err){logger.warn({err,sessionId:s.sessionId,resolvedPhone},'PN to LID warmup failed')}}const e={sessionId:s.sessionId,slot:s.slot,source:'messages.upsert',upsertType,live:upsertType==='notify',messageId:msg?.key?.id||null,chatJid:jid,chatJidAlt:alt,contactPhone:resolvedPhone,fromMe:Boolean(msg?.key?.fromMe),direction:msg?.key?.fromMe?'outbound':'inbound',messageTimestampMs:msgTs,receivedAtMs:receivedAt,hasMessage:Boolean(msg?.message),messageType:type,messageText:messageText(msg?.message,type),media:null,persistenceStatus:'pending',backfillEligible:upsertType==='append'&&Boolean(s.backfill?.enabled)&&Boolean(msgTs)&&msgTs>=Number(s.backfill?.cutoffMs||0)};const c=classifyEvent(e);e.eligibleForFollowup=c.eligible;e.ignoreReason=c.reason;e.dedupeKey=`${s.sessionId}:${e.messageId||'sem-id'}`;if(STAGING_MODE&&e.fromMe)logger.warn({sessionId:s.sessionId,messageId:e.messageId,upsertType:e.upsertType,messageType:e.messageType,chatJid:e.chatJid,chatJidAlt:e.chatJidAlt,contactPhone:e.contactPhone,eligible:e.eligibleForFollowup,ignoreReason:e.ignoreReason,messageTimestampMs:e.messageTimestampMs},'staging outbound event observed');if(!pushEvent(s,e))continue;if(e.eligibleForFollowup&&MEDIA_TYPES[type])await captureMedia(s,msg,e);if(e.eligibleForFollowup&&SUPABASE_SERVICE_KEY)await persistEventDirect(s,e);
 if(upsertType==='notify'&&msgTs&&s.backfill?.latestMs&&Date.now()-s.backfill.latestMs>15*60*1000){
   const chatKey=String(jid);
   const lastReq=s.catchupRequested.get(chatKey)||0;
