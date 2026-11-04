@@ -35,7 +35,7 @@ function safeId(v){return String(v||'').replace(/[^A-Za-z0-9._-]/g,'_').slice(0,
 function encPath(v){return String(v||'').split('/').map(encodeURIComponent).join('/')}
 function publicId(userId,slot){return `${userId}.${slot}`}
 function key(userId,slot){return `${userId}:${slot}`}
-function createSession(userId,slot){return{userId,slot,sessionId:publicId(userId,slot),authDir:path.join(AUTH_ROOT,userId,slot),mediaDir:path.join(MEDIA_ROOT,userId,slot),sock:null,starting:null,reconnectTimer:null,intentionalRestart:false,events:[],seenMessageIds:new Set(),seenMessageOrder:[],lidPnMap:new Map(),catchupRequested:new Map(),backfill:null,state:{phase:'idle',connected:false,qr:null,qrDataUrl:null,user:null,lastError:null,updatedAt:new Date().toISOString()}}}
+function createSession(userId,slot){return{userId,slot,sessionId:publicId(userId,slot),authDir:path.join(AUTH_ROOT,userId,slot),mediaDir:path.join(MEDIA_ROOT,userId,slot),sock:null,starting:null,reconnectTimer:null,intentionalRestart:false,events:[],seenMessageIds:new Set(),seenMessageOrder:[],lidPnMap:new Map(),catchupRequested:new Map(),recoveryPending:[],backfill:null,state:{phase:'idle',connected:false,qr:null,qrDataUrl:null,user:null,lastError:null,updatedAt:new Date().toISOString()}}}
 function getSession(userId,slot){slot=cleanSlot(slot);const k=key(userId,slot);if(!sessions.has(k))sessions.set(k,createSession(userId,slot));return sessions.get(k)}
 function patch(s,next){s.state={...s.state,...next,updatedAt:new Date().toISOString()}}
 function statusPayload(s){return{slot:s.slot,sessionId:s.sessionId,phase:s.state.phase,connected:s.state.connected,qrDataUrl:s.state.qrDataUrl,user:s.state.user,lastError:s.state.lastError,eventCount:s.events.length,followupCandidateCount:s.events.filter(e=>e.eligibleForFollowup).length,directPersistence:Boolean(SUPABASE_SERVICE_KEY),backfill:s.backfill?{enabled:Boolean(s.backfill.enabled),manual:Boolean(s.backfill.manual),cutoffMs:s.backfill.cutoffMs||null,latestMs:s.backfill.latestMs||null,completedAt:s.backfill.completedAt||null}:null,updatedAt:s.state.updatedAt}}
@@ -159,6 +159,7 @@ async function requestRecentConversationCatchup(s,sock,anchors=[]){
       const key={remoteJid,id:a.messageId,fromMe:a.direction==='outbound'};
       if(remoteJidAlt)key.remoteJidAlt=remoteJidAlt;
       const requestId=await sock.fetchMessageHistory(50,key,Math.floor(a.timestampMs/1000));
+      s.recoveryPending.push({requestId:String(requestId||''),phone:a.phone,anchorMessageId:a.messageId,requestedAt:Date.now(),consumed:false});
       logger.warn({sessionId:s.sessionId,phone:a.phone,requestId,anchorMessageId:a.messageId},'active recovery history requested');
     }catch(err){
       logger.warn({err,sessionId:s.sessionId,phone:a.phone,anchorMessageId:a.messageId},'active recovery history request failed');
@@ -219,6 +220,17 @@ async function connect(s){if(s.starting)return s.starting;if(s.sock&&s.state.con
   },
   logger
 });s.sock=sock;sock.ev.on('creds.update',saveCreds);sock.ev.on('messages.upsert',u=>captureUpsert(s,u).catch(err=>logger.warn({err,sessionId:s.sessionId},'message capture failed')));
+function applyRecoveryPhoneFallback(s,msgs){
+  const unresolvedJids=[...new Set((msgs||[]).map(m=>String(m?.key?.remoteJid||'')).filter(j=>j.endsWith('@lid')&&!s.lidPnMap.has(j)))];
+  if(unresolvedJids.length!==1)return null;
+  const pending=(s.recoveryPending||[]).find(x=>!x.consumed&&Date.now()-Number(x.requestedAt||0)<120000);
+  if(!pending?.phone)return null;
+  const lid=unresolvedJids[0],pnJid=`${pending.phone}@s.whatsapp.net`;
+  rememberLidPn(s,lid,pnJid);
+  pending.consumed=true;
+  logger.warn({sessionId:s.sessionId,lid,phone:pending.phone,requestId:pending.requestId,anchorMessageId:pending.anchorMessageId},'recovery LID phone fallback applied');
+  return pending.phone;
+}
 sock.ev.on('messaging-history.set',h=>{
   for(const m of Array.isArray(h?.lidPnMappings)?h.lidPnMappings:[])rememberLidPn(s,m?.lid,m?.pn);
   for(const ct of Array.isArray(h?.contacts)?h.contacts:[]){
@@ -226,6 +238,7 @@ sock.ev.on('messaging-history.set',h=>{
     if(String(ct?.lid||'').endsWith('@lid'))rememberLidPn(s,ct.lid,ct.phoneNumber||ct.id)
   }
   const msgs=Array.isArray(h?.messages)?h.messages:[];
+  applyRecoveryPhoneFallback(s,msgs);
   captureUpsert(s,{type:'append',messages:msgs}).then(()=>{
     logger.warn({sessionId:s.sessionId,count:msgs.length,mappings:s.lidPnMap.size,cutoffMs:s.backfill?.cutoffMs,isLatest:Boolean(h?.isLatest),progress:h?.progress||null,syncType:h?.syncType||null},'WhatsApp history batch processed');
     if(s.backfill?.enabled&&(h?.isLatest===true||Number(h?.progress||0)>=100)){
