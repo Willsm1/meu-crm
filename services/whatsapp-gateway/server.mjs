@@ -204,7 +204,9 @@ async function connect(s){if(s.starting)return s.starting;if(s.sock&&s.state.con
   // Em sessão já pareada, gaps reais de persistência ativam uma sincronização limitada.
   // O WhatsApp decide o lote que entrega; o Taurus filtra e persiste somente a janela de até 7 dias.
   syncFullHistory:shouldSyncHistory(historyMode?'history':'realtime'),
-  shouldSyncHistoryMessage:()=>shouldSyncHistory(historyMode?'history':'realtime'),
+  // Manual recovery stays on a normal realtime socket, but must accept the
+  // history payloads explicitly requested through fetchMessageHistory.
+  shouldSyncHistoryMessage:()=>manualRecovery||shouldSyncHistory(historyMode?'history':'realtime'),
   fireInitQueries:historyMode,
   markOnlineOnConnect:false,
   printQRInTerminal:false,
