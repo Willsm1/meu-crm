@@ -18,12 +18,13 @@ const SUPABASE_SERVICE_KEY=process.env.SUPABASE_SERVICE_ROLE_KEY||process.env.SU
 const ALLOWED_ORIGIN=process.env.TAURUS_ORIGIN||true;
 const MAX_EVENTS=Number(process.env.WA_EVENT_BUFFER||500);
 const MAX_MEDIA_BYTES=Number(process.env.WA_MEDIA_MAX_BYTES||25*1024*1024);
-const GATEWAY_VERSION='linked-device-outbound-v4-recovery-prod';
+const GATEWAY_VERSION='linked-device-outbound-v4-recovery-14d-prod';
+const RECOVERY_DAYS=14;
+const RECOVERY_MAX_AGE_MS=RECOVERY_DAYS*24*60*60*1000;
 const STAGING_MODE=String(process.env.TAURUS_STAGING_MODE||'')==='1';
 const STAGING_TOKEN=String(process.env.TAURUS_STAGING_BYPASS_TOKEN||'');
 const STAGING_USER_ID=String(process.env.TAURUS_STAGING_USER_ID||'11111111-1111-4111-8111-111111111111');
 const logger=pino({level:process.env.LOG_LEVEL||'warn'});
-logger.warn({supabaseUrlConfigured:Boolean(SUPABASE_URL),serviceRoleConfigured:Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),secretKeyConfigured:Boolean(process.env.SUPABASE_SECRET_KEY),effectiveServiceKeyConfigured:Boolean(SUPABASE_SERVICE_KEY)},'Supabase recovery configuration');
 const app=express();
 app.use(cors({origin:ALLOWED_ORIGIN,credentials:false}));
 app.use(express.json({limit:'128kb'}));
@@ -115,12 +116,12 @@ async function latestPersistedMessageMs(sessionId){
 }
 async function backfillPlan(s){
   const latest=await latestPersistedMessageMs(s.sessionId);
-  return historyBackfillPlan(latest,Date.now(),{force:s.forceBackfill===true});
+  return historyBackfillPlan(latest,Date.now(),{force:s.forceBackfill===true,maxAgeMs:RECOVERY_MAX_AGE_MS});
 }
 async function recentRecoveryAnchors(s,{maxRows=250,maxChats=25}={}){
   if(!SUPABASE_SERVICE_KEY)return[];
   try{
-    const floorIso=new Date(Date.now()-7*24*60*60*1000).toISOString();
+    const floorIso=new Date(Date.now()-RECOVERY_MAX_AGE_MS).toISOString();
     const q=new URLSearchParams({
       select:'message_id,direction,contact_phone,message_timestamp',
       session_id:'eq.'+s.sessionId,
@@ -371,10 +372,10 @@ app.post('/api/whatsapp/sessions/:slot/backfill',async(req,res)=>{
     s.recoveryPending=[];
     const plan=await backfillPlan(s);
     s.backfill=plan;
-    logger.warn({userId:req.taurusUser.id,slot:req.params.slot,sessionId:s.sessionId,connected:Boolean(s.state.connected),cutoffMs:plan.cutoffMs},'manual 7-day backfill armed');
+    logger.warn({userId:req.taurusUser.id,slot:req.params.slot,sessionId:s.sessionId,connected:Boolean(s.state.connected),cutoffMs:plan.cutoffMs},`manual ${RECOVERY_DAYS}-day backfill armed`);
     if(!s.state.connected){
       await connect(s);
-      return res.json({ok:true,mode:'automatic-on-connect',message:'Recuperação de até 7 dias iniciada.',...statusPayload(s)})
+      return res.json({ok:true,mode:'automatic-on-connect',message:`Recuperação de até ${RECOVERY_DAYS} dias iniciada.`,...statusPayload(s)})
     }
 
     // A sessão já está pareada e conectada. Reinicia somente o socket técnico,
@@ -388,7 +389,7 @@ app.post('/api/whatsapp/sessions/:slot/backfill',async(req,res)=>{
     await new Promise(resolve=>setTimeout(resolve,700));
     s.intentionalRestart=false;
     const out=await connect(s);
-    return res.json({ok:true,mode:'immediate-recovery',message:'Recuperação de até 7 dias iniciada.',...out})
+    return res.json({ok:true,mode:'immediate-recovery',message:`Recuperação de até ${RECOVERY_DAYS} dias iniciada.`,...out})
   }catch(err){
     res.status(500).json({ok:false,error:err.message||String(err)})
   }
