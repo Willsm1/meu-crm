@@ -11,7 +11,7 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "baileys": "npm:@whiskeysockets/baileys@6.7.24",
+    "baileys": "npm:@whiskeysockets/baileys@7.0.0-rc14",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "pino": "^9.9.0",
