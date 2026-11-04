@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyEvent, disconnectPolicy, phoneFromMessageKey, shouldSyncHistory } from '../core.mjs';
+import { classifyEvent, disconnectPolicy, extractMessageContent, phoneFromMessageKey, shouldSyncHistory } from '../core.mjs';
 
 const base={hasMessage:true,chatJid:'5511999999999@s.whatsapp.net',messageType:'conversation',receivedAtMs:1_000_000,messageTimestampMs:1_000_000,fromMe:false};
 
@@ -45,4 +45,29 @@ test('LID resolves through PN alias map',()=>{
 test('history sync stays disabled in normal realtime mode',()=>{
   assert.equal(shouldSyncHistory('realtime'),false);
   assert.equal(shouldSyncHistory('history'),true);
+});
+
+
+test('video is detected even when messageContextInfo appears first',()=>{
+  const content={
+    messageContextInfo:{deviceListMetadataVersion:2},
+    videoMessage:{mimetype:'video/mp4',caption:'Vídeo teste'}
+  };
+  const r=extractMessageContent(content);
+  assert.equal(r.type,'videoMessage');
+  assert.equal(r.message.videoMessage.caption,'Vídeo teste');
+});
+
+test('video is detected inside view-once/history wrappers',()=>{
+  const content={
+    viewOnceMessageV2:{
+      message:{
+        messageContextInfo:{},
+        videoMessage:{mimetype:'video/mp4',seconds:8}
+      }
+    }
+  };
+  const r=extractMessageContent(content);
+  assert.equal(r.type,'videoMessage');
+  assert.equal(r.node.seconds,8);
 });
