@@ -23,6 +23,7 @@ const STAGING_MODE=String(process.env.TAURUS_STAGING_MODE||'')==='1';
 const STAGING_TOKEN=String(process.env.TAURUS_STAGING_BYPASS_TOKEN||'');
 const STAGING_USER_ID=String(process.env.TAURUS_STAGING_USER_ID||'11111111-1111-4111-8111-111111111111');
 const logger=pino({level:process.env.LOG_LEVEL||'warn'});
+logger.warn({supabaseUrlConfigured:Boolean(SUPABASE_URL),serviceRoleConfigured:Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),secretKeyConfigured:Boolean(process.env.SUPABASE_SECRET_KEY),effectiveServiceKeyConfigured:Boolean(SUPABASE_SERVICE_KEY)},'Supabase recovery configuration');
 const app=express();
 app.use(cors({origin:ALLOWED_ORIGIN,credentials:false}));
 app.use(express.json({limit:'128kb'}));
