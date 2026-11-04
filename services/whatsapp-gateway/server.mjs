@@ -366,11 +366,28 @@ app.post('/api/whatsapp/sessions/:slot/backfill',async(req,res)=>{
   try{
     const s=getSession(req.taurusUser.id,req.params.slot);
     s.forceBackfill=true;
+    s.activeRecoveryRequested=false;
+    s.recoveryPending=[];
     const plan=await backfillPlan(s);
     s.backfill=plan;
     logger.warn({userId:req.taurusUser.id,slot:req.params.slot,sessionId:s.sessionId,connected:Boolean(s.state.connected),cutoffMs:plan.cutoffMs},'manual 7-day backfill armed');
-    if(!s.state.connected){await connect(s);return res.json({ok:true,mode:'automatic-on-connect',...statusPayload(s)})}
-    res.json({ok:true,mode:'armed-for-next-reconnect',message:'Recuperação de até 7 dias preparada. Se a sessão reconectar, o histórico elegível será importado automaticamente.',...statusPayload(s)})
+    if(!s.state.connected){
+      await connect(s);
+      return res.json({ok:true,mode:'automatic-on-connect',message:'Recuperação de até 7 dias iniciada.',...statusPayload(s)})
+    }
+
+    // A sessão já está pareada e conectada. Reinicia somente o socket técnico,
+    // preservando as credenciais, para recriar a conexão em manualRecovery=true.
+    // Isso faz o próprio botão executar o recovery imediatamente, sem logout/novo QR.
+    s.intentionalRestart=true;
+    if(s.reconnectTimer)clearTimeout(s.reconnectTimer);
+    s.reconnectTimer=null;
+    try{s.sock?.end?.(new Error('manual_backfill_immediate_restart'))}catch{}
+    s.sock=null;
+    await new Promise(resolve=>setTimeout(resolve,700));
+    s.intentionalRestart=false;
+    const out=await connect(s);
+    return res.json({ok:true,mode:'immediate-recovery',message:'Recuperação de até 7 dias iniciada.',...out})
   }catch(err){
     res.status(500).json({ok:false,error:err.message||String(err)})
   }
