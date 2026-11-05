@@ -135,7 +135,7 @@ async function loadLeadChat(leadId,root){
     const body=$('.tm-wa-wa-chat-body',root);if(body)body.scrollTop=body.scrollHeight;
   }catch(err){root.innerHTML='<div class="tm-wa-wa-empty">Falha ao carregar histórico: '+esc(String(err?.message||err))+'</div>'}
 }
-async function openLeadHistory(leadId){const m=openModal('Conversa WhatsApp','<div id="tm-wa-lead-history" class="tm-wa-wa-pane" style="min-height:0;flex:1"></div>');await loadLeadChat(leadId,$('#tm-wa-lead-history',m))}
+async function openLeadHistory(leadId){const m=openModal('Conversa WhatsApp','<div id="tm-wa-lead-history" class="tm-wa-wa-pane" data-history-renderer="conversation-v2" style="min-height:0;flex:1"></div>');await loadLeadChat(leadId,$('#tm-wa-lead-history',m))}
 function openModal(title,body){$('#tm-wa-modal')?.remove();const m=document.createElement('div');m.id='tm-wa-modal';m.className='tm-wa-modal';m.innerHTML=`<div class="tm-wa-card"><div class="tm-wa-head"><h3>${esc(title)}</h3><button class="tm-wa-close">×</button></div>${body}</div>`;document.body.appendChild(m);$('.tm-wa-close',m).onclick=()=>m.remove();m.onclick=e=>{if(e.target===m)m.remove()};return m}
 async function openGlobalHistory(){histDiag('openGlobalHistory-called');
   const m=openModal('Histórico WhatsApp','<div id="tm-wa-global-history" style="min-height:0;flex:1;display:flex">Carregando conversas...</div>');
