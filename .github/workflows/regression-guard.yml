@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
@@ -24,6 +26,11 @@ jobs:
       - name: JavaScript syntax
         run: |
           find . -maxdepth 1 -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Regression coverage policy
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python tools/regression_coverage_policy.py
       - name: Regression guard layout
         run: python tools/test_regression_guard_layout.py
       - name: Production invariants
