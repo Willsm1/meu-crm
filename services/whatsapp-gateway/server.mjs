@@ -376,6 +376,18 @@ if(STAGING_MODE){
 }
 
 app.use('/api/whatsapp',authMw);
+app.post('/api/whatsapp/diagnostics/history-ui',(req,res)=>{try{
+  const body=req.body&&typeof req.body==='object'?req.body:{};
+  const safe={
+    type:String(body.type||'').slice(0,80),
+    buttonText:body.buttonText==null?null:String(body.buttonText).slice(0,120),
+    modalText:body.modalText==null?null:String(body.modalText).slice(0,240),
+    historyShell:Boolean(body.historyShell),
+    href:body.href==null?null:String(body.href).slice(0,240)
+  };
+  logger.warn({userId:req.taurusUser.id,...safe},'history ui diagnostic');
+  res.json({ok:true});
+}catch(err){res.status(400).json({ok:false,error:err.message||String(err)})}});
 app.get('/api/whatsapp/sessions',async(req,res)=>{try{const target=await resolveSessionTarget(req);const rows=userSessions(target.userId).map(s=>target.readOnly?adminStatusPayload(s):statusPayload(s));res.json({sessions:rows,targetUserId:target.userId,readOnly:target.readOnly,viewerRole:target.viewerRole})}catch(err){res.status(err.status||500).json({ok:false,error:err.message||String(err)})}});
 app.post('/api/whatsapp/sessions/:slot/start',async(req,res)=>{try{const s=getSession(req.taurusUser.id,req.params.slot);logger.warn({userId:req.taurusUser.id,slot:req.params.slot,sessionId:s.sessionId},'WhatsApp session start requested');const out=await connect(s);logger.warn({sessionId:s.sessionId,phase:out?.phase,connected:out?.connected,hasQr:Boolean(out?.qrDataUrl)},'WhatsApp session start response');res.json({ok:true,...out})}catch(err){logger.error({err,userId:req.taurusUser?.id,slot:req.params.slot},'WhatsApp session start failed');res.status(500).json({ok:false,error:err.message||String(err)})}});
 app.get('/api/whatsapp/sessions/:slot/status',(req,res)=>{try{res.json(statusPayload(getSession(req.taurusUser.id,req.params.slot)))}catch(err){res.status(400).json({ok:false,error:err.message||String(err)})}});
