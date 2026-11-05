@@ -52,13 +52,13 @@ setTimeout(function(){
   const modal=document.getElementById('tm-wa-modal');
   const shell=modal&&modal.querySelector('.tm-wa-wa-shell');
   const txt=modal?modal.textContent:'';
-  const modern=!!document.querySelector('#tm-wa-lead-history[data-history-renderer="conversation-v2"] .tm-wa-wa-chat-head')||!!document.querySelector('#tm-wa-wa-pane .tm-wa-wa-chat-head');
   const legacyMedia=/mensagem\(ns\) registradas/.test(txt);
   const list=document.querySelector('.tm-wa-wa-conversations');
   const first=document.querySelector('[data-hlead]');
   if(first)first.click();
   setTimeout(function(){
     const body=document.querySelector('.tm-wa-wa-chat-body');
+    const modern=!!document.querySelector('#tm-wa-lead-history[data-history-renderer="conversation-v2"] .tm-wa-wa-chat-head')||!!document.querySelector('#tm-wa-wa-pane .tm-wa-wa-chat-head');
     const listScrollable=!!list&&list.scrollHeight>list.clientHeight;
     const bodyScrollable=!!body&&body.scrollHeight>body.clientHeight;
     if(listScrollable)list.scrollTop=120;
