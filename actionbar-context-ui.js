@@ -28,7 +28,7 @@ function sync(){
 function loadWhatsAppProduction(){
   if(document.querySelector('script[data-tm-whatsapp-production]'))return;
   var s=document.createElement('script');
-  s.src='whatsapp-production-loader.js?v=20261104-no-media-render5';
+  s.src='whatsapp-production-loader.js?v=20261104-full-history6';
   s.async=false;
   s.dataset.tmWhatsappProduction='1';
   document.head.appendChild(s);
