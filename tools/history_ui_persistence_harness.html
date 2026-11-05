@@ -41,6 +41,7 @@ window.CRM_CANONICAL={
 </script>
 <script src="../crm-whatsapp-followup-visual.js"></script>
 <script src="../crm-whatsapp-history-range.js"></script>
+<script src="../crm-whatsapp-media-preview.js"></script>
 <script>
 setTimeout(function(){
   const b=document.getElementById('tm-wa-events-btn');
@@ -51,7 +52,9 @@ setTimeout(function(){
   const modal=document.getElementById('tm-wa-modal');
   const shell=modal&&modal.querySelector('.tm-wa-wa-shell');
   const txt=modal?modal.textContent:'';
-  const ok=!!shell && !/Eventos WhatsApp/.test(txt) && /Histórico WhatsApp/.test(document.getElementById('tm-wa-events-btn')?.textContent||'');
+  const modern=!!document.querySelector('#tm-wa-lead-history[data-history-renderer="conversation-v2"] .tm-wa-wa-chat-head')||!!document.querySelector('#tm-wa-wa-pane .tm-wa-wa-chat-head');
+  const legacyMedia=/mensagem\(ns\) registradas/.test(txt);
+  const ok=!!shell && modern && !legacyMedia && !/Eventos WhatsApp/.test(txt) && /Histórico WhatsApp/.test(document.getElementById('tm-wa-events-btn')?.textContent||'');
   document.body.dataset.result=ok?'PASS':'FAIL';
   document.body.dataset.modal=txt.slice(0,200);
 },7500);
