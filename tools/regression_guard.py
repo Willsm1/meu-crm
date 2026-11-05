@@ -166,3 +166,6 @@ require(wa_history, ".tm-wa-wa-chat-body{flex:1;min-height:0;overflow-y:auto", "
 require(wa_history, "IntersectionObserver", "visible WhatsApp media auto-hydration enabled")
 require(wa_history, "rootMargin:'320px 0px'", "media preloads shortly before entering viewport")
 require(wa_loader, "crm-whatsapp-history-range.js?v=20261104-scroll-media11", "history scroll/media cache version")
+
+require(regression_core, "20261104-scroll-media11", "runtime regression cache check matches current WhatsApp history asset")
+require(regression_core, "2026-11-04.10", "runtime regression core version bumped for current history cache contract")
