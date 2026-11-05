@@ -80,7 +80,7 @@ require(wa_loader, 'crm-whatsapp-connections.js', 'multi-WhatsApp manager loaded
 forbid(taurus_next, "cdn.jsdelivr.net/gh/Willsm1/meu-crm@", "duplicate pinned WhatsApp stack in Taurus Next")
 require(taurus_next, "crm-whatsapp-history-range.js?v=20261104-forced-history7", "forced current WhatsApp history module in Taurus Next")
 require(taurus_next, "w.__TM_WA_HISTORY_RANGE__=false", "old history guard reset before forced reload")
-require(wa_loader, "crm-whatsapp-history-range.js?v=20261104-runtime-diag4", "diagnostic conversation history cache version")
+require(wa_loader, "crm-whatsapp-history-range.js?v=20261104-path-probe8", "diagnostic conversation history cache version")
 require(wa_loader, "crm-whatsapp-followup-visual.js?v=20261104-history-owner3", "current follow-up history ownership cache version")
 require(wa_media_compat, 'isLegacyMedia', 'legacy media source translated')
 require(wa_media_compat, '/api/whatsapp/media/', 'hosted media endpoint used')
