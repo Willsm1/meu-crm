@@ -152,3 +152,4 @@ require(wa_media, "async function renderLeadMedia(leadId){return;}", "legacy med
 forbid(wa_media, "mensagem(ns) registradas", "legacy media conversation copy removed")
 require(wa_loader, "crm-whatsapp-history-range.js?v=20261104-render-owner9", "history renderer cache version pinned with media fix")
 require(wa_loader, "crm-whatsapp-media-preview.js?v=20261104-no-render3", "media preview no-render cache version")
+# no-media-render guard active
