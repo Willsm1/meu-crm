@@ -13,6 +13,8 @@
 window.fetch=async function(url){
   return {ok:true,json:async()=>({candidates:[],sessions:[]})};
 };
+window.leads=Array.from({length:5},(_,i)=>({_uuid:String(i+1).padStart(8,'0')+'-1111-4111-8111-111111111111'}));
+window.CRM_SCOPE={get:function(){return {type:'user',id:'scope-test-user'};}};
 window.CRM_CANONICAL={
   rpc: async function(name,args){
     if(name==='whatsapp_followup_summary') return {contacts_received:1,awaiting_response:0,responded:1,oldest_waiting_since:null};
@@ -51,7 +53,7 @@ setTimeout(function(){
 setTimeout(async function(){
   const modal=document.getElementById('tm-wa-modal');
   const shell=modal&&modal.querySelector('.tm-wa-wa-shell');
-  const list=document.querySelector('.tm-wa-wa-conversations');
+  const list=document.querySelector('.tm-wa-wa-conversations');const scopedItems=document.querySelectorAll('[data-hlead]').length;
   const first=document.querySelector('[data-hlead]');
   if(first&&typeof first.onclick==='function') await first.onclick();
   await new Promise(r=>setTimeout(r,250));
@@ -64,8 +66,8 @@ setTimeout(async function(){
   const bodyScrollable=!!body&&body.scrollHeight>body.clientHeight;
   if(listScrollable)list.scrollTop=120;
   if(bodyScrollable)body.scrollTop=Math.max(0,body.scrollHeight-body.clientHeight-120);
-  const ok=!!shell && modern && listScrollable && bodyScrollable && !legacyMedia && !/Eventos WhatsApp/.test(txt) && /Histórico WhatsApp/.test(document.getElementById('tm-wa-events-btn')?.textContent||'');
-  document.body.dataset.listScrollable=String(listScrollable);
+  const ok=!!shell && scopedItems===5 && modern && listScrollable && bodyScrollable && !legacyMedia && !/Eventos WhatsApp/.test(txt) && /Histórico WhatsApp/.test(document.getElementById('tm-wa-events-btn')?.textContent||'');
+  document.body.dataset.scopedItems=String(scopedItems);document.body.dataset.listScrollable=String(listScrollable);
   document.body.dataset.bodyScrollable=String(bodyScrollable);
   document.body.dataset.modern=String(modern);document.body.dataset.pane=(document.getElementById('tm-wa-wa-pane')?.textContent||'').slice(0,180);
   document.body.dataset.result=ok?'PASS':'FAIL';

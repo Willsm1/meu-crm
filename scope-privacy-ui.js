@@ -6,12 +6,12 @@ function ensureStyle(){
   if(document.getElementById('tm-scope-privacy-style'))return;
   var st=document.createElement('style');
   st.id='tm-scope-privacy-style';
-  st.textContent='#crm-scope-wrap{display:none!important}body.tm-scope-admin #crm-scope-wrap{display:flex!important}';
+  st.textContent='#crm-scope-wrap{display:none!important}body.tm-scope-manager #crm-scope-wrap{display:flex!important}';
   document.head.appendChild(st);
 }
 function lock(){
   ensureStyle();
-  if(document.body)document.body.classList.remove('tm-scope-admin');
+  if(document.body)document.body.classList.remove('tm-scope-manager');
 }
 function removeResidual(){
   var wrap=document.getElementById('crm-scope-wrap');
@@ -24,14 +24,14 @@ function verify(){
   verifying=true;
   api.rpc('current_profile_context',{}).then(function(r){
     var me=Array.isArray(r)?r[0]:r;
-    if(me&&me.role==='admin'){
-      if(document.body)document.body.classList.add('tm-scope-admin');
+    if(me&&(me.role==='admin'||me.role==='gerente')){
+      if(document.body)document.body.classList.add('tm-scope-manager');
     }else{
-      if(document.body)document.body.classList.remove('tm-scope-admin');
+      if(document.body)document.body.classList.remove('tm-scope-manager');
       removeResidual();
     }
   }).catch(function(){
-    if(document.body)document.body.classList.remove('tm-scope-admin');
+    if(document.body)document.body.classList.remove('tm-scope-manager');
     removeResidual();
   }).finally(function(){verifying=false;});
 }

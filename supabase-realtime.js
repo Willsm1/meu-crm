@@ -199,7 +199,7 @@ function installFollowup401Retry(){
 }
 function loadUiEnhancements(){
   function add(sel,src,key){if(document.querySelector(sel))return;var s=document.createElement('script');s.src=src;s.async=false;s.dataset[key]='1';document.head.appendChild(s);}
-  add('script[data-tm-scope-privacy]','scope-privacy-ui.js?v=20260920-1124','tmScopePrivacy');
+  add('script[data-tm-scope-privacy]','scope-privacy-ui.js?v=20261105-manager-scope1','tmScopePrivacy');
   add('script[data-tm-period-filters]','ui-period-filters.js?v=20260920-0242','tmPeriodFilters');
   add('script[data-tm-sales-date]','sales-date.js?v=20260920-0255','tmSalesDate');
   add('script[data-tm-followup-render-hub]','followup-render-hub.js?v=20260924-0127','tmFollowupRenderHub');
@@ -222,7 +222,7 @@ function loadUiEnhancements(){
   add('script[data-tm-edit-identity-guard]','edit-identity-guard.js?v=20260923-1234','tmEditIdentityGuard');
   add('script[data-tm-daily-kanban-origins]','daily-kanban-origins-ui.js?v=20260924-0030','tmDailyKanbanOrigins');
   add('script[data-tm-regions-ui]','regions-ui.js?v=20260923-1234','tmRegionsUi');
-  add('script[data-tm-actionbar-context]','actionbar-context-ui.js?v=20261104-scroll-media7','tmActionbarContext');
+  add('script[data-tm-actionbar-context]','actionbar-context-ui.js?v=20261105-history-scope8','tmActionbarContext');
 }
 function followupAtivo(){var p=document.getElementById('page-followup');return !!(p&&p.classList.contains('active'));}
 function reloadSoon(forceFull){
