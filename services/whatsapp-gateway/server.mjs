@@ -35,7 +35,7 @@ function safeId(v){return String(v||'').replace(/[^A-Za-z0-9._-]/g,'_').slice(0,
 function encPath(v){return String(v||'').split('/').map(encodeURIComponent).join('/')}
 function publicId(userId,slot){return `${userId}.${slot}`}
 function key(userId,slot){return `${userId}:${slot}`}
-function createSession(userId,slot){return{userId,slot,sessionId:publicId(userId,slot),authDir:path.join(AUTH_ROOT,userId,slot),mediaDir:path.join(MEDIA_ROOT,userId,slot),sock:null,starting:null,reconnectTimer:null,intentionalRestart:false,events:[],seenMessageIds:new Set(),seenMessageOrder:[],lidPnMap:new Map(),catchupRequested:new Map(),recoveryPending:[],backfill:null,state:{phase:'idle',connected:false,qr:null,qrDataUrl:null,user:null,lastError:null,updatedAt:new Date().toISOString()}}}
+function createSession(userId,slot){return{userId,slot,sessionId:publicId(userId,slot),authDir:path.join(AUTH_ROOT,userId,slot),mediaDir:path.join(MEDIA_ROOT,userId,slot),sock:null,starting:null,reconnectTimer:null,intentionalRestart:false,events:[],seenMessageIds:new Set(),seenMessageOrder:[],lidPnMap:new Map(),catchupRequested:new Map(),recoveryPending:[],eligibleTargetsCache:{at:0,rows:[]},targetedRecoveryUntil:0,lastEligibleRecoveryAt:0,backfill:null,state:{phase:'idle',connected:false,qr:null,qrDataUrl:null,user:null,lastError:null,updatedAt:new Date().toISOString()}}}
 function getSession(userId,slot){slot=cleanSlot(slot);const k=key(userId,slot);if(!sessions.has(k))sessions.set(k,createSession(userId,slot));return sessions.get(k)}
 function patch(s,next){s.state={...s.state,...next,updatedAt:new Date().toISOString()}}
 function statusPayload(s){return{slot:s.slot,sessionId:s.sessionId,phase:s.state.phase,connected:s.state.connected,qrDataUrl:s.state.qrDataUrl,user:s.state.user,lastError:s.state.lastError,eventCount:s.events.length,followupCandidateCount:s.events.filter(e=>e.eligibleForFollowup).length,directPersistence:Boolean(SUPABASE_SERVICE_KEY),backfill:s.backfill?{enabled:Boolean(s.backfill.enabled),manual:Boolean(s.backfill.manual),cutoffMs:s.backfill.cutoffMs||null,latestMs:s.backfill.latestMs||null,completedAt:s.backfill.completedAt||null}:null,updatedAt:s.state.updatedAt}}
@@ -116,37 +116,36 @@ async function backfillPlan(s){
   const latest=await latestPersistedMessageMs(s.sessionId);
   return historyBackfillPlan(latest,Date.now(),{force:s.forceBackfill===true});
 }
-async function recentRecoveryAnchors(s,{maxRows=250,maxChats=25}={}){
+async function eligibleRecoveryTargets(s,{limit=100,force=false}={}){
   if(!SUPABASE_SERVICE_KEY)return[];
+  const now=Date.now();
+  if(!force&&s.eligibleTargetsCache?.rows?.length&&now-Number(s.eligibleTargetsCache.at||0)<30000)return s.eligibleTargetsCache.rows;
   try{
-    const floorIso=new Date(Date.now()-7*24*60*60*1000).toISOString();
-    const q=new URLSearchParams({
-      select:'message_id,direction,contact_phone,message_timestamp',
-      session_id:'eq.'+s.sessionId,
-      message_timestamp:'gte.'+floorIso,
-      order:'message_timestamp.desc',
-      limit:String(maxRows)
-    });
-    const r=await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_conversation_events?${q.toString()}`,{headers:serviceHeaders()});
-    if(!r.ok)throw new Error(`anchors ${r.status}: ${(await r.text()).slice(0,180)}`);
-    const rows=await r.json(),seen=new Set(),out=[];
-    for(const row of rows||[]){
-      const phone=String(row?.contact_phone||'').replace(/\D/g,'');
-      const id=String(row?.message_id||'');
-      const ts=Date.parse(row?.message_timestamp||'');
-      if(!phone||!id||!Number.isFinite(ts)||seen.has(phone))continue;
-      seen.add(phone);
-      out.push({phone,messageId:id,direction:row?.direction==='outbound'?'outbound':'inbound',timestampMs:ts});
-      if(out.length>=maxChats)break;
-    }
-    return out;
-  }catch(err){
-    logger.warn({err,sessionId:s.sessionId},'recovery anchors load failed');
-    return[];
+    const raw=await rpcAsService('whatsapp_gateway_recovery_targets',{p_user_id:s.userId,p_session_id:s.sessionId,p_days:RECOVERY_DAYS,p_limit:Math.max(1,Math.min(200,Number(limit||100)))});
+    const rows=(Array.isArray(raw)?raw:[]).map(x=>{
+      let phone=String(x?.phone||'').replace(/\D/g,'');
+      if(phone.length===10||phone.length===11)phone='55'+phone;
+      return{leadId:x?.lead_id||null,phone,status:x?.status||null,messageId:x?.anchor_message_id||null,direction:x?.anchor_direction==='outbound'?'outbound':'inbound',timestampMs:Date.parse(x?.anchor_timestamp||''),anchorSessionId:x?.anchor_session_id||null};
+    }).filter(x=>x.phone);
+    s.eligibleTargetsCache={at:now,rows};
+    return rows;
+  }catch(err){logger.warn({err,sessionId:s.sessionId},'eligible recovery targets load failed');return[]}
+}
+async function recentRecoveryAnchors(s,{maxChats=50}={}){
+  const rows=await eligibleRecoveryTargets(s,{limit:Math.max(100,maxChats),force:true});
+  const seen=new Set(),out=[];
+  for(const row of rows){
+    if(!row.messageId||!Number.isFinite(row.timestampMs)||seen.has(row.phone))continue;
+    seen.add(row.phone);
+    out.push(row);
+    if(out.length>=maxChats)break;
   }
+  logger.warn({sessionId:s.sessionId,eligibleTargets:rows.length,anchoredTargets:out.length},'eligible recovery anchors prepared');
+  return out;
 }
 async function requestRecentConversationCatchup(s,sock,anchors=[]){
   if(typeof sock?.fetchMessageHistory!=='function')return;
+  s.targetedRecoveryUntil=Date.now()+120000;
   logger.warn({sessionId:s.sessionId,count:anchors.length},'active recovery anchors loaded');
   for(const a of anchors){
     try{
@@ -164,6 +163,7 @@ async function requestRecentConversationCatchup(s,sock,anchors=[]){
     }catch(err){
       logger.warn({err,sessionId:s.sessionId,phone:a.phone,anchorMessageId:a.messageId},'active recovery history request failed');
     }
+    await new Promise(resolve=>setTimeout(resolve,100));
   }
 }
 async function uploadAsService(storagePath,buf,mime){if(!SUPABASE_SERVICE_KEY)throw new Error('service role ausente');const h={apikey:SUPABASE_SERVICE_KEY,'Content-Type':mime||'application/octet-stream','x-upsert':'true'};if(!STAGING_MODE)h.Authorization=`Bearer ${SUPABASE_SERVICE_KEY}`;const r=await fetch(`${SUPABASE_URL}/storage/v1/object/whatsapp-media/${encPath(storagePath)}`,{method:'POST',headers:h,body:buf});const text=await r.text();if(!r.ok)throw new Error(`storage ${r.status}: ${text.slice(0,240)}`);return text}
@@ -188,15 +188,21 @@ async function persistEventDirect(s,e){
     logger.info({sessionId:e.sessionId,messageId:e.messageId,storagePath},'event/media persisted directly');
   }catch(err){e.persistenceStatus='error';if(e.media){e.media.supabaseStatus='error';e.media.persistError=err?.message||String(err)}logger.warn({err,sessionId:e.sessionId,messageId:e.messageId},'direct persistence failed')}
 }
-async function captureUpsert(s,upsert){const receivedAt=Date.now(),upsertType=upsert?.type||'unknown';for(const msg of upsert?.messages||[]){const jid=msg?.key?.remoteJid||null;if(!jid)continue;const alt=msg?.key?.remoteJidAlt||null;const extracted=extractMessageContent(msg?.message),type=extracted.type,contentMessage=extracted.message;const msgTs=asEpochMs(msg?.messageTimestamp);let resolvedPhone=phoneFromMessageKey(msg?.key,s)||phoneFromJid(alt)||null;if(!resolvedPhone&&String(jid).endsWith('@lid')){try{const pn=await s.sock?.signalRepository?.lidMapping?.getPNForLID?.(jid);resolvedPhone=phoneFromJid(pn)||null;if(resolvedPhone)rememberLidPn(s,jid,pn)}catch(err){logger.warn({err,sessionId:s.sessionId,jid},'LID to PN lookup failed')}}if(resolvedPhone){try{const pnJid=`${resolvedPhone}@s.whatsapp.net`;const learnedLid=await s.sock?.signalRepository?.lidMapping?.getLIDForPN?.(pnJid);if(learnedLid)rememberLidPn(s,learnedLid,pnJid)}catch(err){logger.warn({err,sessionId:s.sessionId,resolvedPhone},'PN to LID warmup failed')}}const e={sessionId:s.sessionId,slot:s.slot,source:'messages.upsert',upsertType,live:upsertType==='notify',messageId:msg?.key?.id||null,chatJid:jid,chatJidAlt:alt,contactPhone:resolvedPhone,fromMe:Boolean(msg?.key?.fromMe),direction:msg?.key?.fromMe?'outbound':'inbound',messageTimestampMs:msgTs,receivedAtMs:receivedAt,hasMessage:Boolean(msg?.message),messageType:type,messageText:messageText(contentMessage,type),media:null,persistenceStatus:'pending',backfillEligible:upsertType==='append'&&Boolean(s.backfill?.enabled)&&Boolean(msgTs)&&msgTs>=Number(s.backfill?.cutoffMs||0)};const c=classifyEvent(e);e.eligibleForFollowup=c.eligible;e.ignoreReason=c.reason;e.dedupeKey=`${s.sessionId}:${e.messageId||'sem-id'}`;if(STAGING_MODE&&e.fromMe)logger.warn({sessionId:s.sessionId,messageId:e.messageId,upsertType:e.upsertType,messageType:e.messageType,chatJid:e.chatJid,chatJidAlt:e.chatJidAlt,contactPhone:e.contactPhone,eligible:e.eligibleForFollowup,ignoreReason:e.ignoreReason,messageTimestampMs:e.messageTimestampMs},'staging outbound event observed');if(!pushEvent(s,e))continue;if(e.eligibleForFollowup&&MEDIA_TYPES[type])await captureMedia(s,msg,e,contentMessage);if(e.eligibleForFollowup&&SUPABASE_SERVICE_KEY)await persistEventDirect(s,e);
-if(upsertType==='notify'&&msgTs&&s.backfill?.latestMs&&Date.now()-s.backfill.latestMs>15*60*1000){
-  const chatKey=String(jid);
-  const lastReq=s.catchupRequested.get(chatKey)||0;
-  if(Date.now()-lastReq>6*60*60*1000&&typeof s.sock?.fetchMessageHistory==='function'){
-    s.catchupRequested.set(chatKey,Date.now());
-    s.sock.fetchMessageHistory(50,msg.key,msg.messageTimestamp).then(requestId=>{
-      logger.warn({sessionId:s.sessionId,chatJid:chatKey,requestId},'on-demand WhatsApp catch-up requested')
-    }).catch(err=>logger.warn({err,sessionId:s.sessionId,chatJid:chatKey},'on-demand WhatsApp catch-up failed'))
+async function captureUpsert(s,upsert){const receivedAt=Date.now(),upsertType=upsert?.type||'unknown';for(const msg of upsert?.messages||[]){const jid=msg?.key?.remoteJid||null;if(!jid)continue;const alt=msg?.key?.remoteJidAlt||null;const extracted=extractMessageContent(msg?.message),type=extracted.type,contentMessage=extracted.message;const msgTs=asEpochMs(msg?.messageTimestamp);let resolvedPhone=phoneFromMessageKey(msg?.key,s)||phoneFromJid(alt)||null;if(!resolvedPhone&&String(jid).endsWith('@lid')){try{const pn=await s.sock?.signalRepository?.lidMapping?.getPNForLID?.(jid);resolvedPhone=phoneFromJid(pn)||null;if(resolvedPhone)rememberLidPn(s,jid,pn)}catch(err){logger.warn({err,sessionId:s.sessionId,jid},'LID to PN lookup failed')}}if(resolvedPhone){try{const pnJid=`${resolvedPhone}@s.whatsapp.net`;const learnedLid=await s.sock?.signalRepository?.lidMapping?.getLIDForPN?.(pnJid);if(learnedLid)rememberLidPn(s,learnedLid,pnJid)}catch(err){logger.warn({err,sessionId:s.sessionId,resolvedPhone},'PN to LID warmup failed')}}const e={sessionId:s.sessionId,slot:s.slot,source:'messages.upsert',upsertType,live:upsertType==='notify',messageId:msg?.key?.id||null,chatJid:jid,chatJidAlt:alt,contactPhone:resolvedPhone,fromMe:Boolean(msg?.key?.fromMe),direction:msg?.key?.fromMe?'outbound':'inbound',messageTimestampMs:msgTs,receivedAtMs:receivedAt,hasMessage:Boolean(msg?.message),messageType:type,messageText:messageText(contentMessage,type),media:null,persistenceStatus:'pending',backfillEligible:upsertType==='append'&&Boolean(msgTs)&&((Boolean(s.backfill?.enabled)&&msgTs>=Number(s.backfill?.cutoffMs||0))||(Date.now()<Number(s.targetedRecoveryUntil||0)&&msgTs>=Date.now()-RECOVERY_MAX_AGE_MS))};const c=classifyEvent(e);e.eligibleForFollowup=c.eligible;e.ignoreReason=c.reason;e.dedupeKey=`${s.sessionId}:${e.messageId||'sem-id'}`;if(STAGING_MODE&&e.fromMe)logger.warn({sessionId:s.sessionId,messageId:e.messageId,upsertType:e.upsertType,messageType:e.messageType,chatJid:e.chatJid,chatJidAlt:e.chatJidAlt,contactPhone:e.contactPhone,eligible:e.eligibleForFollowup,ignoreReason:e.ignoreReason,messageTimestampMs:e.messageTimestampMs},'staging outbound event observed');if(!pushEvent(s,e))continue;if(e.eligibleForFollowup&&MEDIA_TYPES[type])await captureMedia(s,msg,e,contentMessage);if(e.eligibleForFollowup&&SUPABASE_SERVICE_KEY)await persistEventDirect(s,e);
+if(upsertType==='notify'&&msgTs&&e.contactPhone&&typeof s.sock?.fetchMessageHistory==='function'){
+  const targets=await eligibleRecoveryTargets(s,{limit:200});
+  const target=targets.find(x=>x.phone===String(e.contactPhone).replace(/\D/g,'')||x.phone==='55'+String(e.contactPhone).replace(/\D/g,''));
+  if(target){
+    const chatKey=String(e.contactPhone);
+    const lastReq=s.catchupRequested.get(chatKey)||0;
+    if(Date.now()-lastReq>6*60*60*1000){
+      s.catchupRequested.set(chatKey,Date.now());
+      s.targetedRecoveryUntil=Date.now()+120000;
+      s.sock.fetchMessageHistory(50,msg.key,msg.messageTimestamp).then(requestId=>{
+        s.recoveryPending.push({requestId:String(requestId||''),phone:target.phone,anchorMessageId:e.messageId,requestedAt:Date.now(),consumed:false});
+        logger.warn({sessionId:s.sessionId,leadId:target.leadId,phone:target.phone,requestId},'eligible lead live catch-up requested')
+      }).catch(err=>logger.warn({err,sessionId:s.sessionId,leadId:target.leadId,phone:target.phone},'eligible lead live catch-up failed'))
+    }
   }
 }}}
 async function connect(s){if(s.starting)return s.starting;if(s.sock&&s.state.connected)return statusPayload(s);s.starting=(async()=>{patch(s,{phase:'starting',connected:false,lastError:null});await fs.mkdir(s.authDir,{recursive:true});let authState=await useMultiFileAuthState(s.authDir);let auth=authState.state,saveCreds=authState.saveCreds;let isRegistered=Boolean(auth?.creds?.registered),hasMe=Boolean(auth?.creds?.me);const pairingRestart=Boolean(s.pairingRestart);const stablePaired=isRegistered||(hasMe&&Boolean(s.pairingEstablished));const finishingPairing=!stablePaired&&hasMe;const isPaired=isRegistered||hasMe;const requestedBackfill=Boolean(s.forceBackfill);logger.warn({sessionId:s.sessionId,registered:isRegistered,hasMe,isPaired,pairingRestart,finishingPairing},'WhatsApp auth state loaded');s.backfill=(pairingRestart||finishingPairing)?{enabled:false,cutoffMs:0,latestMs:null,manual:false,pairing:true,finishingPairing:true}:(stablePaired?await backfillPlan(s):{enabled:false,cutoffMs:0,latestMs:null,manual:false,pairing:true});const manualRecovery=stablePaired&&!pairingRestart&&!finishingPairing&&Boolean(s.backfill?.enabled)&&Boolean(s.backfill?.manual);const historyMode=stablePaired&&!pairingRestart&&!finishingPairing&&Boolean(s.backfill?.enabled)&&!manualRecovery;if(manualRecovery)s.recoveryAnchors=await recentRecoveryAnchors(s);else s.recoveryAnchors=[];logger.warn({sessionId:s.sessionId,historyMode,manualRecovery,manual:Boolean(s.backfill?.manual),cutoffMs:s.backfill?.cutoffMs,latestMs:s.backfill?.latestMs,requestedBackfill,recoveryAnchors:s.recoveryAnchors.length},'WhatsApp connection mode selected');const sock=makeWASocket({
@@ -247,7 +253,7 @@ sock.ev.on('messaging-history.set',h=>{
     }
   }).catch(err=>logger.warn({err,sessionId:s.sessionId},'history backfill failed'))
 })
-sock.ev.on('connection.update',async u=>{const{connection,qr,lastDisconnect}=u;if(qr){let qrDataUrl=null;try{qrDataUrl=await QRCode.toDataURL(qr,{margin:2,width:320,errorCorrectionLevel:'M'})}catch(err){logger.error({err,sessionId:s.sessionId},'WhatsApp QR encode failed')}logger.warn({sessionId:s.sessionId,hasQr:Boolean(qr),hasQrDataUrl:Boolean(qrDataUrl)},'WhatsApp QR received');patch(s,{phase:'qr',connected:false,qrDataUrl,lastError:null})}if(connection==='open'){if(s.reconnectTimer)clearTimeout(s.reconnectTimer);s.reconnectTimer=null;s.pairingRestart=false;s.pairingEstablished=true;patch(s,{phase:s.backfill?.enabled?'backfilling':'connected',connected:true,qrDataUrl:null,user:sock.user?{id:sock.user.id||null,name:sock.user.name||null}:null,lastError:null});if(s.backfill?.enabled&&s.backfill?.manual&&!s.activeRecoveryRequested){s.activeRecoveryRequested=true;s.forceBackfill=false;requestRecentConversationCatchup(s,sock,s.recoveryAnchors||[]).catch(err=>{s.activeRecoveryRequested=false;s.forceBackfill=true;logger.warn({err,sessionId:s.sessionId},'active recovery failed')})}if(s.forceBackfill&&!s.backfill?.enabled&&!s.postPairingBackfillRestart){s.postPairingBackfillRestart=true;logger.warn({sessionId:s.sessionId},'manual backfill survived pairing; scheduling registered reconnect');setTimeout(async()=>{try{await saveCreds()}catch{}s.intentionalRestart=true;try{s.sock?.end?.(new Error('manual_backfill_registered_restart'))}catch{}setTimeout(()=>{s.sock=null;s.postPairingBackfillRestart=false;s.intentionalRestart=false;connect(s).catch(err=>patch(s,{phase:'error',lastError:err.message||String(err)}))},600)},1200)}}if(connection==='close'){const code=lastDisconnect?.error?.output?.statusCode;const policy=disconnectPolicy(code);const intentionalRestart=Boolean(s.intentionalRestart);if(s.backfill?.enabled&&s.backfill?.manual&&!s.activeRecoveryRequested)s.forceBackfill=true;const loggedOut=policy.loggedOut;const restartRequired=policy.restartRequired;logger.warn({sessionId:s.sessionId,code,loggedOut,restartRequired},'WhatsApp connection closed');if(restartRequired){s.pairingRestart=true;try{await saveCreds();logger.warn({sessionId:s.sessionId},'WhatsApp creds persisted before required restart')}catch(err){logger.error({err,sessionId:s.sessionId},'failed to persist WhatsApp creds before restart')}}patch(s,{phase:loggedOut?'logged_out':'disconnected',connected:false,qrDataUrl:null,lastError:lastDisconnect?.error?.message||String(lastDisconnect?.error||'connection closed')});s.sock=null;if(!loggedOut&&!intentionalRestart&&!s.suppressReconnect&&!s.reconnectTimer){const reconnectDelay=policy.reconnectDelayMs;s.reconnectTimer=setTimeout(()=>{s.reconnectTimer=null;connect(s).catch(err=>patch(s,{phase:'error',lastError:err.message||String(err)}))},reconnectDelay)}}});return statusPayload(s)})();try{return await s.starting}catch(err){patch(s,{phase:'error',connected:false,lastError:err.message||String(err)});throw err}finally{s.starting=null}}
+sock.ev.on('connection.update',async u=>{const{connection,qr,lastDisconnect}=u;if(qr){let qrDataUrl=null;try{qrDataUrl=await QRCode.toDataURL(qr,{margin:2,width:320,errorCorrectionLevel:'M'})}catch(err){logger.error({err,sessionId:s.sessionId},'WhatsApp QR encode failed')}logger.warn({sessionId:s.sessionId,hasQr:Boolean(qr),hasQrDataUrl:Boolean(qrDataUrl)},'WhatsApp QR received');patch(s,{phase:'qr',connected:false,qrDataUrl,lastError:null})}if(connection==='open'){if(s.reconnectTimer)clearTimeout(s.reconnectTimer);s.reconnectTimer=null;s.pairingRestart=false;s.pairingEstablished=true;if(Date.now()-Number(s.lastEligibleRecoveryAt||0)>5*60*1000){s.lastEligibleRecoveryAt=Date.now();setTimeout(async()=>{try{const anchors=await recentRecoveryAnchors(s,{maxChats:50});if(anchors.length)await requestRecentConversationCatchup(s,sock,anchors)}catch(err){logger.warn({err,sessionId:s.sessionId},'automatic eligible recovery failed')}},1200)};patch(s,{phase:s.backfill?.enabled?'backfilling':'connected',connected:true,qrDataUrl:null,user:sock.user?{id:sock.user.id||null,name:sock.user.name||null}:null,lastError:null});if(s.backfill?.enabled&&s.backfill?.manual&&!s.activeRecoveryRequested){s.activeRecoveryRequested=true;s.forceBackfill=false;requestRecentConversationCatchup(s,sock,s.recoveryAnchors||[]).catch(err=>{s.activeRecoveryRequested=false;s.forceBackfill=true;logger.warn({err,sessionId:s.sessionId},'active recovery failed')})}if(s.forceBackfill&&!s.backfill?.enabled&&!s.postPairingBackfillRestart){s.postPairingBackfillRestart=true;logger.warn({sessionId:s.sessionId},'manual backfill survived pairing; scheduling registered reconnect');setTimeout(async()=>{try{await saveCreds()}catch{}s.intentionalRestart=true;try{s.sock?.end?.(new Error('manual_backfill_registered_restart'))}catch{}setTimeout(()=>{s.sock=null;s.postPairingBackfillRestart=false;s.intentionalRestart=false;connect(s).catch(err=>patch(s,{phase:'error',lastError:err.message||String(err)}))},600)},1200)}}if(connection==='close'){const code=lastDisconnect?.error?.output?.statusCode;const policy=disconnectPolicy(code);const intentionalRestart=Boolean(s.intentionalRestart);if(s.backfill?.enabled&&s.backfill?.manual&&!s.activeRecoveryRequested)s.forceBackfill=true;const loggedOut=policy.loggedOut;const restartRequired=policy.restartRequired;logger.warn({sessionId:s.sessionId,code,loggedOut,restartRequired},'WhatsApp connection closed');if(restartRequired){s.pairingRestart=true;try{await saveCreds();logger.warn({sessionId:s.sessionId},'WhatsApp creds persisted before required restart')}catch(err){logger.error({err,sessionId:s.sessionId},'failed to persist WhatsApp creds before restart')}}patch(s,{phase:loggedOut?'logged_out':'disconnected',connected:false,qrDataUrl:null,lastError:lastDisconnect?.error?.message||String(lastDisconnect?.error||'connection closed')});s.sock=null;if(!loggedOut&&!intentionalRestart&&!s.suppressReconnect&&!s.reconnectTimer){const reconnectDelay=policy.reconnectDelayMs;s.reconnectTimer=setTimeout(()=>{s.reconnectTimer=null;connect(s).catch(err=>patch(s,{phase:'error',lastError:err.message||String(err)}))},reconnectDelay)}}});return statusPayload(s)})();try{return await s.starting}catch(err){patch(s,{phase:'error',connected:false,lastError:err.message||String(err)});throw err}finally{s.starting=null}}
 async function authenticate(req){if(STAGING_MODE&&STAGING_TOKEN&&String(req.headers['x-taurus-staging']||'')===STAGING_TOKEN)return{id:STAGING_USER_ID,staging:true};if(!SUPABASE_URL||!SUPABASE_KEY)throw Object.assign(new Error('gateway sem configuração Supabase'),{status:503});const auth=req.headers.authorization||'';if(!auth.startsWith('Bearer '))throw Object.assign(new Error('não autenticado'),{status:401});const r=await fetch(`${SUPABASE_URL}/auth/v1/user`,{headers:{apikey:SUPABASE_KEY,Authorization:auth}});if(!r.ok)throw Object.assign(new Error('sessão Taurus inválida'),{status:401});const u=await r.json();if(!u?.id)throw Object.assign(new Error('usuário inválido'),{status:401});return u}
 async function authMw(req,res,next){try{req.taurusUser=await authenticate(req);next()}catch(err){res.status(err.status||401).json({ok:false,error:err.message||String(err)})}}
 function userHeaders(auth,extra={}){return{apikey:SUPABASE_KEY,Authorization:auth,'Content-Type':'application/json','Accept-Profile':'crm','Content-Profile':'crm',...extra}}
