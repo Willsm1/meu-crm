@@ -30,6 +30,7 @@ wa_loader = require_file("whatsapp-production-loader.js")
 taurus_next = require_file("taurus-next.html")
 wa_media_compat = require_file("crm-whatsapp-hosted-media-compat.js")
 wa_history = require_file("crm-whatsapp-history-range.js")
+wa_media = require_file("crm-whatsapp-media-preview.js")
 gateway = require_file("services/whatsapp-gateway/server.mjs")
 gateway_core = require_file("services/whatsapp-gateway/core.mjs")
 gateway_media_core = require_file("services/whatsapp-gateway/media-core.mjs")
@@ -138,3 +139,11 @@ if errors:
 
 print("REGRESSION GUARD: PASS")
 
+
+require(wa_history, 'data-history-renderer="conversation-v2"', "modern WhatsApp history renderer owns lead DOM")
+require(wa_media, "body.dataset.historyRenderer==='conversation-v2'", "legacy media renderer cannot overwrite modern history DOM")
+require(wa_loader, "crm-whatsapp-media-preview.js?v=20261104-owner-safe2", "current media preview ownership cache version")
+require(actionbar, "whatsapp-production-loader.js?v=20261104-media-owner4", "current production loader media ownership cache version")
+require(realtime, "actionbar-context-ui.js?v=20261104-media-owner4", "current actionbar media ownership cache version")
+require(taurus_next, "crm.html?nextboot=20261104-clean2", "current Taurus Next clean boot version")
+require(taurus_next, "supabase-realtime.js?v=20261104-next-clean2", "current Taurus Next realtime root version")
