@@ -1,0 +1,59 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>History persistence harness</title></head>
+<body data-result="PENDING">
+<div class="nav-tabs"></div>
+<section id="page-followup" class="page active">
+  <div class="container">
+    <div><input id="fu-busca"></div>
+    <select id="fu-resp"></select><select id="fu-prio"></select>
+    <table><tbody id="fu-tbody"><tr><td>Lead</td><td></td></tr></tbody></table>
+  </div>
+</section>
+<script>
+window.fetch=async function(url){
+  return {ok:true,json:async()=>({candidates:[],sessions:[]})};
+};
+window.CRM_CANONICAL={
+  rpc: async function(name,args){
+    if(name==='whatsapp_followup_summary') return {contacts_received:1,awaiting_response:0,responded:1,oldest_waiting_since:null};
+    if(name==='whatsapp_followup_events') return [{
+      lead_id:'11111111-1111-4111-8111-111111111111',
+      nome:'Cliente Teste',
+      contact_phone:'5511999999999',
+      message_timestamp:new Date().toISOString(),
+      message_text:'Mensagem de teste',
+      message_type:'conversation',
+      direction:'inbound'
+    }];
+    if(name==='whatsapp_lead_briefing') return {
+      lead:{id:'11111111-1111-4111-8111-111111111111',nome:'Cliente Teste',telefone:'5511999999999'},
+      whatsapp_events:[{
+        message_id:'m1',
+        at:new Date().toISOString(),
+        text:'Mensagem de teste',
+        direction:'inbound'
+      }]
+    };
+    if(name==='whatsapp_media_for_lead') return [];
+    return {};
+  }
+};
+</script>
+<script src="../crm-whatsapp-followup-visual.js"></script>
+<script src="../crm-whatsapp-history-range.js"></script>
+<script>
+setTimeout(function(){
+  const b=document.getElementById('tm-wa-events-btn');
+  if(!b){document.body.dataset.result='FAIL_NO_BUTTON';return;}
+  b.click();
+},500);
+setTimeout(function(){
+  const modal=document.getElementById('tm-wa-modal');
+  const shell=modal&&modal.querySelector('.tm-wa-wa-shell');
+  const txt=modal?modal.textContent:'';
+  const ok=!!shell && !/Eventos WhatsApp/.test(txt) && /Histórico WhatsApp/.test(document.getElementById('tm-wa-events-btn')?.textContent||'');
+  document.body.dataset.result=ok?'PASS':'FAIL';
+  document.body.dataset.modal=txt.slice(0,200);
+},7500);
+</script>
+</body></html>
