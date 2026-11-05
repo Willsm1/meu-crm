@@ -15,6 +15,21 @@
 var f=document.getElementById('crm'),status=document.getElementById('boot');
 f.addEventListener('load',function(){
   status.textContent='Taurus Next · módulos de produção carregados pelo CRM';
+  try{
+    var w=f.contentWindow,d=f.contentDocument;
+    setTimeout(function(){
+      try{
+        var oldHistory=d.getElementById('tm-wa-history-range');
+        if(oldHistory)oldHistory.remove();
+        w.__TM_WA_HISTORY_RANGE__=false;
+        var s=d.createElement('script');
+        s.id='tm-wa-history-range';
+        s.src='crm-whatsapp-history-range.js?v=20261104-forced-history7';
+        s.async=false;
+        d.head.appendChild(s);
+      }catch(e){}
+    },900);
+  }catch(e){}
   setTimeout(function(){status.style.opacity='.35';},2500);
 });
 })();
