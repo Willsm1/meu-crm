@@ -169,3 +169,8 @@ require(wa_loader, "crm-whatsapp-history-range.js?v=20261104-scroll-media11", "h
 
 require(regression_core, "20261104-scroll-media11", "runtime regression cache check matches current WhatsApp history asset")
 require(regression_core, "2026-11-04.10", "runtime regression core version bumped for current history cache contract")
+
+require(actionbar, "2026-11-04.10", "actionbar requires current Anti-Regressao core version")
+require(realtime, "actionbar-context-ui.js?v=20261104-regression10", "current actionbar cache version for Anti-Regressao")
+require(taurus_next, "crm.html?nextboot=20261104-clean6", "current Taurus Next boot version for Anti-Regressao")
+require(taurus_next, "supabase-realtime.js?v=20261104-next-clean6", "current realtime root version for Anti-Regressao")
