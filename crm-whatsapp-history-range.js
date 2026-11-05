@@ -1,6 +1,33 @@
 /* Taurus Magnum CRM — WhatsApp history + date range — TEST BRANCH ONLY */
 (function(){
 'use strict';
+const __TM_HIST_DIAG=[];
+function histDiag(type,extra){
+  try{
+    const row={at:new Date().toISOString(),type,extra:extra||null,stack:(new Error()).stack||null};
+    __TM_HIST_DIAG.push(row);if(__TM_HIST_DIAG.length>100)__TM_HIST_DIAG.shift();
+    window.__TM_WA_HISTORY_DIAG__=__TM_HIST_DIAG;
+    console.warn('[Taurus HistoryDiag]',row);
+  }catch(_e){}
+}
+function installHistoryDiagObserver(){
+  if(window.__TM_WA_HISTORY_DIAG_OBSERVER__)return;
+  window.__TM_WA_HISTORY_DIAG_OBSERVER__=true;
+  let prev=document.getElementById('tm-wa-modal');
+  const mo=new MutationObserver(()=>{
+    const cur=document.getElementById('tm-wa-modal');
+    if(prev&&!cur)histDiag('modal-removed',{prevText:String(prev.textContent||'').slice(0,180)});
+    if(cur&&cur!==prev)histDiag('modal-replaced-or-created',{text:String(cur.textContent||'').slice(0,180),html:String(cur.innerHTML||'').slice(0,300)});
+    prev=cur;
+  });
+  mo.observe(document.documentElement,{childList:true,subtree:true});
+  setInterval(()=>{
+    const b=document.getElementById('tm-wa-events-btn');
+    const m=document.getElementById('tm-wa-modal');
+    histDiag('heartbeat',{buttonText:b?b.textContent:null,modalText:m?String(m.textContent||'').slice(0,120):null,historyShell:!!document.querySelector('.tm-wa-wa-shell')});
+  },1000);
+}
+
 if(window.__TM_WA_HISTORY_RANGE__) return;
 window.__TM_WA_HISTORY_RANGE__=true;
 const MONTHS=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -100,7 +127,7 @@ async function loadLeadChat(leadId,root){
 }
 async function openLeadHistory(leadId){const m=openModal('Conversa WhatsApp','<div id="tm-wa-lead-history" class="tm-wa-wa-pane" style="min-height:0;flex:1"></div>');await loadLeadChat(leadId,$('#tm-wa-lead-history',m))}
 function openModal(title,body){$('#tm-wa-modal')?.remove();const m=document.createElement('div');m.id='tm-wa-modal';m.className='tm-wa-modal';m.innerHTML=`<div class="tm-wa-card"><div class="tm-wa-head"><h3>${esc(title)}</h3><button class="tm-wa-close">×</button></div>${body}</div>`;document.body.appendChild(m);$('.tm-wa-close',m).onclick=()=>m.remove();m.onclick=e=>{if(e.target===m)m.remove()};return m}
-async function openGlobalHistory(){
+async function openGlobalHistory(){histDiag('openGlobalHistory-called');
   const m=openModal('Histórico WhatsApp','<div id="tm-wa-global-history" style="min-height:0;flex:1;display:flex">Carregando conversas...</div>');
   try{
     const rows=await rpc('whatsapp_followup_events',{p_from:from.toISOString(),p_to:to.toISOString(),p_limit:1000}),ev=Array.isArray(rows)?rows:[],by=new Map();
@@ -117,7 +144,7 @@ async function openGlobalHistory(){
     if(data[0]){const first=$('[data-hlead]',list);if(first){first.classList.add('active');await loadLeadChat(data[0].lead_id,pane)}}
   }catch(err){const el=$('#tm-wa-global-history',m);if(el)el.innerHTML='<div class="tm-wa-wa-empty">Falha ao carregar histórico: '+esc(String(err?.message||err))+'</div>'}
 }
-window.TM_WA_HISTORY_OPEN=openGlobalHistory;
+window.TM_WA_HISTORY_OPEN=openGlobalHistory;installHistoryDiagObserver();
 function showRaw(m,ev){const el=$('#tm-wa-global-history',m);el.innerHTML=`<button class="btn" id="tm-wa-back-history" style="margin-bottom:10px">← Conversas por lead</button><table class="tm-wa-table"><thead><tr><th>Quando</th><th>Lead</th><th>Direção</th><th>Telefone</th><th>Tipo</th><th>Conteúdo</th></tr></thead><tbody>${ev.length?ev.map(x=>`<tr><td>${esc(dt(x.message_timestamp))}</td><td>${esc(x.nome||'—')}</td><td>${esc(x.direction)}</td><td>${esc(x.contact_phone)}</td><td>${esc(x.message_type||'—')}</td><td>${esc(x.message_text||'—')}</td></tr>`).join(''):'<tr><td colspan="6">Sem eventos.</td></tr>'}</tbody></table>`;$('#tm-wa-back-history',m).onclick=()=>{m.remove();openGlobalHistory()}}
 function decorateRows(){ $$('#fu-tbody tr').forEach(tr=>{const a=$('.tm-agendar-btn[data-lead-id]',tr);if(!a)return;const id=a.dataset.leadId,td=tr.lastElementChild;if(!td)return;let h=$('.tm-wa-history-icon',tr);if(!h){h=document.createElement('button');h.type='button';h.className='tm-wa-history-icon';h.title='Histórico WhatsApp';h.setAttribute('aria-label','Histórico WhatsApp');h.innerHTML='<i class="ti ti-brand-whatsapp"></i>';const g=$('.tm-wa-gpt',tr);g?td.insertBefore(h,g):td.appendChild(h);h.onclick=e=>{e.preventDefault();e.stopPropagation();openLeadHistory(id)}}const g=$('.tm-wa-gpt',tr);if(g&&!g.dataset.realGpt){g.dataset.realGpt='1';g.onclick=e=>{e.preventDefault();e.stopPropagation();document.dispatchEvent(new CustomEvent('tm:wa-gpt-analyze',{detail:{leadId:g.dataset.leadId}}))}} })}
 function applyPreset(v){const now=new Date();if(v==='today'){pickA=startDay(now);pickB=startDay(now)}else if(v==='yesterday'){const x=new Date(now);x.setDate(x.getDate()-1);pickA=startDay(x);pickB=startDay(x)}else if(v==='7'){const x=new Date(now);x.setDate(x.getDate()-6);pickA=startDay(x);pickB=startDay(now)}else if(v==='month'){pickA=new Date(now.getFullYear(),now.getMonth(),1);pickB=startDay(now)}view=new Date(pickA.getFullYear(),pickA.getMonth(),1);renderCal()}
