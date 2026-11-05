@@ -159,3 +159,4 @@ require(wa_history, "p_limit:10000", "global WhatsApp history event limit expand
 require(wa_history, "p_limit:5000", "lead WhatsApp history message limit expanded")
 require(wa_history, "Histórico completo disponível", "lead WhatsApp history no longer labels follow-up date range")
 forbid(wa_history, "ev.filter(x=>{const a=new Date(x.at);return a>=from&&a<=to}", "lead WhatsApp history must not inherit follow-up calendar")
+# full-history guard active
