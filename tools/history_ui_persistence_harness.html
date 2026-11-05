@@ -16,23 +16,23 @@ window.fetch=async function(url){
 window.CRM_CANONICAL={
   rpc: async function(name,args){
     if(name==='whatsapp_followup_summary') return {contacts_received:1,awaiting_response:0,responded:1,oldest_waiting_since:null};
-    if(name==='whatsapp_followup_events') return [{
-      lead_id:'11111111-1111-4111-8111-111111111111',
-      nome:'Cliente Teste',
-      contact_phone:'5511999999999',
-      message_timestamp:new Date().toISOString(),
-      message_text:'Mensagem de teste',
+    if(name==='whatsapp_followup_events') return Array.from({length:40},(_,i)=>({
+      lead_id:String(i+1).padStart(8,'0')+'-1111-4111-8111-111111111111',
+      nome:'Cliente '+(i+1),
+      contact_phone:'55119999'+String(i).padStart(4,'0'),
+      message_timestamp:new Date(Date.now()-i*60000).toISOString(),
+      message_text:'Mensagem '+(i+1),
       message_type:'conversation',
-      direction:'inbound'
-    }];
+      direction:i%2?'outbound':'inbound'
+    }));
     if(name==='whatsapp_lead_briefing') return {
       lead:{id:'11111111-1111-4111-8111-111111111111',nome:'Cliente Teste',telefone:'5511999999999'},
-      whatsapp_events:[{
-        message_id:'m1',
-        at:new Date().toISOString(),
-        text:'Mensagem de teste',
-        direction:'inbound'
-      }]
+      whatsapp_events:Array.from({length:120},(_,i)=>({
+        message_id:'m'+i,
+        at:new Date(Date.now()-(120-i)*60000).toISOString(),
+        text:'Mensagem de teste '+i,
+        direction:i%2?'outbound':'inbound'
+      }))
     };
     if(name==='whatsapp_media_for_lead') return [];
     return {};
@@ -54,7 +54,20 @@ setTimeout(function(){
   const txt=modal?modal.textContent:'';
   const modern=!!document.querySelector('#tm-wa-lead-history[data-history-renderer="conversation-v2"] .tm-wa-wa-chat-head')||!!document.querySelector('#tm-wa-wa-pane .tm-wa-wa-chat-head');
   const legacyMedia=/mensagem\(ns\) registradas/.test(txt);
-  const ok=!!shell && modern && !legacyMedia && !/Eventos WhatsApp/.test(txt) && /Histórico WhatsApp/.test(document.getElementById('tm-wa-events-btn')?.textContent||'');
+  const list=document.querySelector('.tm-wa-wa-conversations');
+  const first=document.querySelector('[data-hlead]');
+  if(first)first.click();
+  setTimeout(function(){
+    const body=document.querySelector('.tm-wa-wa-chat-body');
+    const listScrollable=!!list&&list.scrollHeight>list.clientHeight;
+    const bodyScrollable=!!body&&body.scrollHeight>body.clientHeight;
+    if(listScrollable)list.scrollTop=120;
+    if(bodyScrollable)body.scrollTop=Math.max(0,body.scrollHeight-body.clientHeight-120);
+    const ok=!!shell && modern && listScrollable && bodyScrollable && !legacyMedia && !/Eventos WhatsApp/.test(txt) && /Histórico WhatsApp/.test(document.getElementById('tm-wa-events-btn')?.textContent||'');
+    document.body.dataset.result=ok?'PASS':'FAIL';
+    document.body.dataset.modal=txt.slice(0,200);
+  },500);
+  return;
   document.body.dataset.result=ok?'PASS':'FAIL';
   document.body.dataset.modal=txt.slice(0,200);
 },7500);
