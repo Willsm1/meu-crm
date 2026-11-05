@@ -48,26 +48,26 @@ setTimeout(function(){
   if(!b){document.body.dataset.result='FAIL_NO_BUTTON';return;}
   b.onclick=function(){setTimeout(function(){var m=document.getElementById('tm-wa-modal');if(m)m.outerHTML='<div id="tm-wa-modal">Eventos WhatsApp</div>';},1200)};b.click();
 },500);
-setTimeout(function(){
+setTimeout(async function(){
   const modal=document.getElementById('tm-wa-modal');
   const shell=modal&&modal.querySelector('.tm-wa-wa-shell');
-  const txt=modal?modal.textContent:'';
-  const legacyMedia=/mensagem\(ns\) registradas/.test(txt);
   const list=document.querySelector('.tm-wa-wa-conversations');
   const first=document.querySelector('[data-hlead]');
-  if(first)first.click();
-  setTimeout(function(){
-    const body=document.querySelector('.tm-wa-wa-chat-body');
-    const modern=!!document.querySelector('#tm-wa-lead-history[data-history-renderer="conversation-v2"] .tm-wa-wa-chat-head')||!!document.querySelector('#tm-wa-wa-pane .tm-wa-wa-chat-head');
-    const listScrollable=!!list&&list.scrollHeight>list.clientHeight;
-    const bodyScrollable=!!body&&body.scrollHeight>body.clientHeight;
-    if(listScrollable)list.scrollTop=120;
-    if(bodyScrollable)body.scrollTop=Math.max(0,body.scrollHeight-body.clientHeight-120);
-    const ok=!!shell && modern && listScrollable && bodyScrollable && !legacyMedia && !/Eventos WhatsApp/.test(txt) && /Histórico WhatsApp/.test(document.getElementById('tm-wa-events-btn')?.textContent||'');
-    document.body.dataset.listScrollable=String(listScrollable);document.body.dataset.bodyScrollable=String(bodyScrollable);document.body.dataset.modern=String(modern);document.body.dataset.result=ok?'PASS':'FAIL';
-    document.body.dataset.modal=txt.slice(0,200);
-  },500);
-  return;
+  if(first&&typeof first.onclick==='function') await first.onclick();
+  await new Promise(r=>setTimeout(r,250));
+  const liveModal=document.getElementById('tm-wa-modal');
+  const txt=liveModal?liveModal.textContent:'';
+  const body=document.querySelector('.tm-wa-wa-chat-body');
+  const modern=!!document.querySelector('#tm-wa-wa-pane .tm-wa-wa-chat-head')||!!document.querySelector('#tm-wa-lead-history[data-history-renderer="conversation-v2"] .tm-wa-wa-chat-head');
+  const legacyMedia=/mensagem\(ns\) registradas/.test(txt);
+  const listScrollable=!!list&&list.scrollHeight>list.clientHeight;
+  const bodyScrollable=!!body&&body.scrollHeight>body.clientHeight;
+  if(listScrollable)list.scrollTop=120;
+  if(bodyScrollable)body.scrollTop=Math.max(0,body.scrollHeight-body.clientHeight-120);
+  const ok=!!shell && modern && listScrollable && bodyScrollable && !legacyMedia && !/Eventos WhatsApp/.test(txt) && /Histórico WhatsApp/.test(document.getElementById('tm-wa-events-btn')?.textContent||'');
+  document.body.dataset.listScrollable=String(listScrollable);
+  document.body.dataset.bodyScrollable=String(bodyScrollable);
+  document.body.dataset.modern=String(modern);
   document.body.dataset.result=ok?'PASS':'FAIL';
   document.body.dataset.modal=txt.slice(0,200);
 },7500);
