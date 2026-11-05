@@ -377,13 +377,13 @@ if(STAGING_MODE){
 
 app.use('/api/whatsapp',authMw);
 app.post('/api/whatsapp/diagnostics/history-ui',(req,res)=>{try{
-  const body=req.body&&typeof req.body==='object'?req.body:{};
+  const body=Object.assign({},req.query||{},req.body&&typeof req.body==='object'?req.body:{});
   const safe={
     type:String(body.type||'').slice(0,80),
     buttonText:body.buttonText==null?null:String(body.buttonText).slice(0,120),
     modalText:body.modalText==null?null:String(body.modalText).slice(0,240),
     historyShell:Boolean(body.historyShell),
-    href:body.href==null?null:String(body.href).slice(0,240)
+    href:body.path==null?null:String(body.path).slice(0,120),framed:String(body.framed||'').slice(0,8)
   };
   logger.warn({userId:req.taurusUser.id,...safe},'history ui diagnostic');
   res.json({ok:true});
