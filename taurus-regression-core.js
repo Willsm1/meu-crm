@@ -6,7 +6,7 @@ if(window.TAURUS_REGRESSION)return;
 const cells=new Map();
 const tests=[];
 const runtimeErrors=[];
-const VERSION='2026-11-04.10';
+const VERSION='2026-11-05.1';
 
 function now(){return Date.now()}
 function makeRunId(){
@@ -112,6 +112,25 @@ async function supaRead(table,select='*'){
     return directRead(table,select);
   }
 }
+async function supaRpc(name,args={},profile='public'){
+  const cfg=supabaseConfig(),token=browserSessionToken();
+  if(!cfg||!cfg.url||!cfg.publishableKey||!token)throw new Error('RPC autenticada indisponível');
+  const r=await fetch(cfg.url+'/rest/v1/rpc/'+encodeURIComponent(name),{
+    method:'POST',
+    headers:{
+      'apikey':cfg.publishableKey,
+      'Authorization':'Bearer '+token,
+      'Content-Type':'application/json',
+      'Accept-Profile':profile,
+      'Content-Profile':profile
+    },
+    body:JSON.stringify(args||{})
+  });
+  const text=await r.text();
+  let data=null;try{data=text?JSON.parse(text):null}catch(_e){}
+  if(!r.ok)throw new Error(String(data&&data.message||('RPC HTTP '+r.status)));
+  return data;
+}
 async function authenticatedUser(){
   try{
     const cli=await waitSupabaseClient(800);
@@ -148,7 +167,7 @@ async function runOne(t,mode){
   const started=now();
   if(t.destructive&&mode!=='full')return {key:t.key,cellId:t.cellId,id:t.id,label:t.label,status:'skipped',severity:t.severity,durationMs:0,source:t.source,details:'modo seguro'};
   try{
-    const value=await withTimeout(t.run({assert,exists,script,supaRead,wa,mode,runtimeErrors}),t.timeoutMs,t.key);
+    const value=await withTimeout(t.run({assert,exists,script,supaRead,supaRpc,wa,mode,runtimeErrors}),t.timeoutMs,t.key);
     const normalized=value&&typeof value==='object'&&('status' in value||'details' in value)?value:{details:value===undefined?'ok':value};
     return {key:t.key,cellId:t.cellId,id:t.id,label:t.label,status:normalized.status||'passed',severity:t.severity,durationMs:now()-started,source:t.source,details:normalized.details||'ok'};
   }catch(e){
@@ -335,6 +354,7 @@ registerTest('supabase',{id:'session',label:'Sessão Supabase válida',run:async
 registerTest('supabase',{id:'leads-read',label:'Tabela leads legível',source:'crm.leads',run:async({supaRead})=>({details:'leitura ok · '+(await supaRead('leads','id')).length+' amostra(s)'})});
 registerTest('supabase',{id:'interactions-read',label:'Tabela interactions legível',source:'crm.interactions',run:async({supaRead})=>({details:'leitura ok · '+(await supaRead('interactions','id')).length+' amostra(s)'})});
 registerTest('supabase',{id:'regression-runs-read',label:'Canal de relatórios legível',source:'crm.regression_runs',run:async({supaRead})=>({details:'leitura ok · '+(await supaRead('regression_runs','id')).length+' amostra(s)'})});
+registerTest('supabase',{id:'executive-scope-isolated',label:'Escopo executivo isolado no banco',severity:'critical',source:'public.executive_scope_audit',run:async({supaRpc,assert})=>{const d=await supaRpc('executive_scope_audit',{},'public');assert(d&&d.ok===true,'auditoria de escopo executivo falhou',d);assert(d.view_security_invoker===true,'v_followup sem security_invoker',d);assert(d.rpc_lead_guards===true,'RPC sem can_see_lead',d);assert(d.anon_execute_blocked===true,'RPC crítica executável por anon',d);return {details:'view segura · RPCs isoladas por lead · anon bloqueado'}}});
 
 /* WhatsApp */
 registerTest('whatsapp',{id:'production-loader',label:'Loader WhatsApp pronto',run:({assert})=>assert(window.__TM_WHATSAPP_PRODUCTION_READY__===true,'loader WhatsApp ainda não pronto: '+String(window.__TM_WHATSAPP_PRODUCTION_ERROR__||''))});
