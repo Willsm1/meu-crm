@@ -45,7 +45,7 @@ window.CRM_CANONICAL={
 setTimeout(function(){
   const b=document.getElementById('tm-wa-events-btn');
   if(!b){document.body.dataset.result='FAIL_NO_BUTTON';return;}
-  b.click();
+  b.onclick=function(){setTimeout(function(){var m=document.getElementById('tm-wa-modal');if(m)m.outerHTML='<div id="tm-wa-modal">Eventos WhatsApp</div>';},1200)};b.click();
 },500);
 setTimeout(function(){
   const modal=document.getElementById('tm-wa-modal');
