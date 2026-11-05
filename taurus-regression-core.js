@@ -6,7 +6,7 @@ if(window.TAURUS_REGRESSION)return;
 const cells=new Map();
 const tests=[];
 const runtimeErrors=[];
-const VERSION='2026-11-05.1';
+const VERSION='2026-11-05.2';
 
 function now(){return Date.now()}
 function makeRunId(){
@@ -367,7 +367,7 @@ registerTest('whatsapp',{id:'candidates-endpoint',label:'Endpoint de captura/fol
 registerTest('whatsapp',{id:'history-opener',label:'Novo histórico WhatsApp disponível',severity:'critical',run:({assert})=>{assert(typeof window.TM_WA_HISTORY_OPEN==='function','opener do novo histórico ausente');return {details:'TM_WA_HISTORY_OPEN ativo'}}});
 registerTest('whatsapp',{id:'history-singleton',label:'Histórico WhatsApp sem módulo duplicado',severity:'critical',run:({assert})=>{const n=document.querySelectorAll('#tm-wa-history-range').length;assert(n===1,'módulo de histórico duplicado: '+n);return {details:'1 módulo de histórico'}}});
 registerTest('whatsapp',{id:'history-button-owner',label:'Botão aponta para Histórico WhatsApp novo',severity:'critical',run:({assert})=>{const b=document.getElementById('tm-wa-events-btn');if(!b)return {status:'skipped',details:'botão ainda não renderizado nesta tela'};assert(/Histórico WhatsApp/i.test(String(b.textContent||'')),'botão voltou ao rótulo legado: '+String(b.textContent||''));return {details:'botão sob ownership do histórico novo'}}});
-registerTest('whatsapp',{id:'history-cache-version',label:'Histórico atual sem cache legado',severity:'major',run:({assert})=>{const s=document.getElementById('tm-wa-history-range');assert(!!s,'script de histórico ausente');assert(/20261104-scroll-media11/.test(String(s.src||'')),'versão antiga do histórico carregada: '+String(s.src||''));return {details:'cache version atual'}}});
+registerTest('whatsapp',{id:'history-cache-version',label:'Histórico atual sem cache legado',severity:'major',run:({assert})=>{const s=document.getElementById('tm-wa-history-range');assert(!!s,'script de histórico ausente');assert(/20261105-global-scope12/.test(String(s.src||'')),'versão antiga do histórico carregada: '+String(s.src||''));return {details:'cache version atual'}}});
 
 /* Media */
 ['tm-wa-hosted-media-compat','tm-wa-storage','tm-wa-media','tm-wa-archive-hotfix'].forEach(id=>registerTest('media',{id:'script-'+id,label:'Módulo '+id+' carregado',source:'#'+id,run:({assert,script})=>assert(script(id),'script ausente: '+id)}));

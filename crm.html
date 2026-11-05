@@ -5468,7 +5468,15 @@ function _fuMontarResponsaveis(){
   var sel=document.getElementById('fu-resp');
   if(!sel) return;
 
-  /* executivo/gerente nao escolhe responsavel: ve apenas os proprios leads */
+  /* O seletor global CRM_SCOPE e a fonte unica de responsavel.
+     Evita combinar VISÃO=Will com um fu-resp antigo (ex.: Joseph) e zerar a fila. */
+  if(window.CRM_SCOPE){
+    sel.value='';
+    sel.style.display='none';
+    return;
+  }
+
+  /* fallback legado: sem CRM_SCOPE, apenas admin escolhe responsavel aqui */
   var papel=(typeof papelAtual==='function')?papelAtual():null;
   if(papel!=='admin'){ sel.style.display='none'; sel.value=''; return; }
 
@@ -5503,8 +5511,8 @@ function fuRenderFila(){
   var fp=(document.getElementById('fu-prio')||{}).value||'';
   var bq=((document.getElementById('fu-busca')||{}).value||'').trim().toLowerCase();
   var selR=document.getElementById('fu-resp');
-  /* so admin filtra por responsavel; para os demais o seletor nem existe */
-  var fr=(selR && selR.style.display!=='none') ? (selR.value||'') : '';
+  /* CRM_SCOPE já aplica o responsável/equipe globalmente. Não combinar com filtro legado. */
+  var fr=window.CRM_SCOPE ? '' : ((selR && selR.style.display!=='none') ? (selR.value||'') : '');
 
   var lista=_fuLinhas.filter(function(x){
     if(window.CRM_SCOPE && window.CRM_SCOPE.allowFollowup && !window.CRM_SCOPE.allowFollowup(x)) return false;
