@@ -8,6 +8,16 @@ function histDiag(type,extra){
     __TM_HIST_DIAG.push(row);if(__TM_HIST_DIAG.length>100)__TM_HIST_DIAG.shift();
     window.__TM_WA_HISTORY_DIAG__=__TM_HIST_DIAG;
     console.warn('[Taurus HistoryDiag]',row);
+    try{
+      const api=window.TM_WA_RUNTIME&&window.TM_WA_RUNTIME.api;
+      if(typeof api==='function')api('/api/whatsapp/diagnostics/history-ui',{method:'POST',body:JSON.stringify({
+        type:row.type,
+        buttonText:row.extra&&row.extra.buttonText,
+        modalText:row.extra&&(row.extra.modalText||row.extra.text||row.extra.prevText),
+        historyShell:row.extra&&row.extra.historyShell,
+        href:location.href
+      })}).catch(()=>{});
+    }catch(_e){}
   }catch(_e){}
 }
 function installHistoryDiagObserver(){
