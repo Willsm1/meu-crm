@@ -158,13 +158,23 @@ async function loadLeadChat(leadId,root){
 }
 async function openLeadHistory(leadId){const m=openModal('Conversa WhatsApp','<div id="tm-wa-lead-history" class="tm-wa-wa-pane" data-history-renderer="conversation-v2" style="min-height:0;flex:1"></div>');await loadLeadChat(leadId,$('#tm-wa-lead-history',m))}
 function openModal(title,body){$('#tm-wa-modal')?.remove();const m=document.createElement('div');m.id='tm-wa-modal';m.className='tm-wa-modal';m.innerHTML=`<div class="tm-wa-card"><div class="tm-wa-head"><h3>${esc(title)}</h3><button class="tm-wa-close">×</button></div>${body}</div>`;document.body.appendChild(m);$('.tm-wa-close',m).onclick=()=>m.remove();m.onclick=e=>{if(e.target===m)m.remove()};return m}
+function currentHistoryScope(){
+  const api=window.CRM_SCOPE,scope=api&&typeof api.get==='function'?api.get():null;
+  if(!scope)return {ids:null,label:''};
+  const sel=document.getElementById('crm-scope-select');
+  const label=sel&&sel.selectedOptions&&sel.selectedOptions[0]?String(sel.selectedOptions[0].textContent||'').trim():'';
+  if(scope.type==='all')return {ids:null,label:label||'Todos'};
+  const rows=Array.isArray(window.leads)?window.leads:[];
+  const ids=new Set(rows.map(x=>String(x&&((x._uuid)||(x.lead_id)||(x.id))||'')).filter(Boolean));
+  return {ids:ids,label:label||''};
+}
 async function openGlobalHistory(){histDiag('openGlobalHistory-called');
   const m=openModal('Histórico WhatsApp','<div id="tm-wa-global-history" style="min-height:0;flex:1;display:flex">Carregando conversas...</div>');
   try{
-    const rows=await rpc('whatsapp_followup_events',{p_from:HISTORY_ALL_FROM.toISOString(),p_to:HISTORY_ALL_TO.toISOString(),p_limit:10000}),ev=Array.isArray(rows)?rows:[],by=new Map();
+    const rows=await rpc('whatsapp_followup_events',{p_from:HISTORY_ALL_FROM.toISOString(),p_to:HISTORY_ALL_TO.toISOString(),p_limit:10000}),scope=currentHistoryScope(),rawEv=Array.isArray(rows)?rows:[],ev=scope.ids?rawEv.filter(x=>scope.ids.has(String(x.lead_id||''))):rawEv,by=new Map();
     for(const x of ev){const k=String(x.lead_id||'');if(!k)continue;if(!by.has(k))by.set(k,{lead_id:k,nome:x.nome||'Sem nome',phone:x.contact_phone||'',count:0,last:x.message_timestamp,preview:x.message_text||x.message_type||'mensagem'});const a=by.get(k);a.count++;if(new Date(x.message_timestamp)>new Date(a.last)){a.last=x.message_timestamp;a.preview=x.message_text||x.message_type||'mensagem';a.phone=x.contact_phone||a.phone}}
     const data=[...by.values()].sort((a,b)=>new Date(b.last)-new Date(a.last)),el=$('#tm-wa-global-history',m);
-    el.innerHTML='<div class="tm-wa-wa-shell"><div class="tm-wa-wa-list"><div class="tm-wa-wa-list-head"><input id="tm-wa-hist-search" class="tm-wa-hist-search" type="text" placeholder="Buscar lead ou telefone"><div style="font-size:10px;color:#8696a0">'+data.length+' conversa(s) · histórico completo disponível</div></div><div class="tm-wa-wa-conversations" id="tm-wa-wa-conversations"></div></div><div class="tm-wa-wa-pane" id="tm-wa-wa-pane"><div class="tm-wa-wa-empty">Selecione uma conversa.</div></div></div>';
+    el.innerHTML='<div class="tm-wa-wa-shell"><div class="tm-wa-wa-list"><div class="tm-wa-wa-list-head"><input id="tm-wa-hist-search" class="tm-wa-hist-search" type="text" placeholder="Buscar lead ou telefone"><div style="font-size:10px;color:#8696a0">'+data.length+' conversa(s) · '+esc(scope.label?('visão: '+scope.label):'histórico completo disponível')+'</div></div><div class="tm-wa-wa-conversations" id="tm-wa-wa-conversations"></div></div><div class="tm-wa-wa-pane" id="tm-wa-wa-pane"><div class="tm-wa-wa-empty">Selecione uma conversa.</div></div></div>';
     const list=$('#tm-wa-wa-conversations',m),pane=$('#tm-wa-wa-pane',m);
     function draw(arr){
       list.innerHTML=arr.length?arr.map(x=>'<button type="button" class="tm-wa-wa-item" data-hlead="'+esc(x.lead_id)+'"><span class="tm-wa-wa-avatar">'+esc(initials(x.nome))+'</span><span><div class="tm-wa-wa-name">'+esc(x.nome)+'</div><div class="tm-wa-wa-preview">'+esc(x.preview||'')+'</div></span><span class="tm-wa-wa-time">'+esc(waTime(x.last))+'</span></button>').join(''):'<div class="tm-wa-wa-empty">Nenhuma conversa.</div>';
