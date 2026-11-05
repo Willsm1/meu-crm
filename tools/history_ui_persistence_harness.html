@@ -67,7 +67,7 @@ setTimeout(async function(){
   const ok=!!shell && modern && listScrollable && bodyScrollable && !legacyMedia && !/Eventos WhatsApp/.test(txt) && /Histórico WhatsApp/.test(document.getElementById('tm-wa-events-btn')?.textContent||'');
   document.body.dataset.listScrollable=String(listScrollable);
   document.body.dataset.bodyScrollable=String(bodyScrollable);
-  document.body.dataset.modern=String(modern);
+  document.body.dataset.modern=String(modern);document.body.dataset.pane=(document.getElementById('tm-wa-wa-pane')?.textContent||'').slice(0,180);
   document.body.dataset.result=ok?'PASS':'FAIL';
   document.body.dataset.modal=txt.slice(0,200);
 },7500);
