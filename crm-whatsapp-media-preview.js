@@ -14,7 +14,7 @@ function mediaHtml(m){if(!m)return'';if(m.status==='failed')return `<div class="
 async function liveMap(){try{const r=await fetch('http://127.0.0.1:8787/followup/candidates?limit=500',{cache:'no-store'});if(!r.ok)throw new Error('observer '+r.status);const d=await r.json(),map=new Map();for(const x of d.candidates||[])map.set(`${x.sessionId}:${x.messageId}`,x);return map}catch(_e){return new Map()}}
 async function storedMap(leadId){try{if(!window.TM_WA_STORAGE?.getLeadAssets)return new Map();const rows=await window.TM_WA_STORAGE.getLeadAssets(leadId),map=new Map();for(const x of rows||[])map.set(`${x.session_id}:${x.message_id}`,{kind:x.media_kind,mimeType:x.mime_type,fileName:x.original_filename,durationSeconds:x.duration_seconds,caption:x.caption,status:'stored_supabase',url:x.signed_url,source:'Supabase Storage privado'});return map}catch(_e){return new Map()}}
 async function renderLeadMedia(leadId){
-  const body=$('#tm-wa-lead-history'); if(!body)return;
+  const body=$('#tm-wa-lead-history'); if(!body)return;if(body.dataset.historyRenderer==='conversation-v2'||body.classList.contains('tm-wa-wa-pane'))return;
   try{
     const [d,live,stored]=await Promise.all([rpc('whatsapp_lead_briefing',{p_lead_id:leadId,p_limit:300}),liveMap(),storedMap(leadId)]);
     const data=Array.isArray(d)?(d[0]||{}):(d||{}), ev=Array.isArray(data.whatsapp_events)?data.whatsapp_events:[];
