@@ -8,30 +8,30 @@
 </head>
 <body>
 <div class="boot" id="boot">Carregando Taurus Next…</div>
-<iframe id="crm" src="crm.html"></iframe>
+<iframe id="crm"></iframe>
 <script>
 (function(){
 'use strict';
 var f=document.getElementById('crm'),status=document.getElementById('boot');
-f.addEventListener('load',function(){
-  status.textContent='Taurus Next · módulos de produção carregados pelo CRM';
+async function boot(){
+  status.textContent='Carregando Taurus Next…';
   try{
-    var w=f.contentWindow,d=f.contentDocument;
-    setTimeout(function(){
-      try{
-        var oldHistory=d.getElementById('tm-wa-history-range');
-        if(oldHistory)oldHistory.remove();
-        w.__TM_WA_HISTORY_RANGE__=false;
-        var s=d.createElement('script');
-        s.id='tm-wa-history-range';
-        s.src='crm-whatsapp-history-range.js?v=20261104-forced-history7';
-        s.async=false;
-        d.head.appendChild(s);
-      }catch(e){}
-    },900);
-  }catch(e){}
+    var r=await fetch('crm.html?nextboot=20261104-clean1',{cache:'no-store'});
+    if(!r.ok)throw new Error('crm.html '+r.status);
+    var html=await r.text();
+    html=html.replace(/supabase-realtime\.js\?v=[^"'<>\s]+/g,'supabase-realtime.js?v=20261104-next-clean1');
+    if(!/<base\s/i.test(html))html=html.replace(/<head([^>]*)>/i,'<head$1><base href="./">');
+    f.srcdoc=html;
+  }catch(e){
+    status.textContent='Falha ao carregar Taurus Next';
+    console.error('[Taurus Next clean boot]',e);
+  }
+}
+f.addEventListener('load',function(){
+  status.textContent='Taurus Next · produção atual carregada';
   setTimeout(function(){status.style.opacity='.35';},2500);
 });
+boot();
 })();
 </script>
 </body>
