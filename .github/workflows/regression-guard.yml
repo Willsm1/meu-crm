@@ -70,6 +70,8 @@ jobs:
             echo "$OUT" | grep -o 'data-result="[A-Z]*"[^>]*' || true
             exit 1
           fi
+      - name: Legacy WhatsApp history path guard
+        run: python tools/test_legacy_history_path_removed.py
       - name: WhatsApp history persistence smoke
         run: |
           python3 -m http.server 8767 --bind 127.0.0.1 >/tmp/tm-history-http.log 2>&1 &
