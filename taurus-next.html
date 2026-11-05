@@ -16,10 +16,10 @@ var f=document.getElementById('crm'),status=document.getElementById('boot');
 async function boot(){
   status.textContent='Carregando Taurus Next…';
   try{
-    var r=await fetch('crm.html?nextboot=20261104-clean3',{cache:'no-store'});
+    var r=await fetch('crm.html?nextboot=20261104-clean4',{cache:'no-store'});
     if(!r.ok)throw new Error('crm.html '+r.status);
     var html=await r.text();
-    html=html.replace(/supabase-realtime\.js\?v=[^"'<>\s]+/g,'supabase-realtime.js?v=20261104-next-clean3');
+    html=html.replace(/supabase-realtime\.js\?v=[^"'<>\s]+/g,'supabase-realtime.js?v=20261104-next-clean4');
     if(!/<base\s/i.test(html))html=html.replace(/<head([^>]*)>/i,'<head$1><base href="./">');
     f.srcdoc=html;
   }catch(e){
