@@ -34,7 +34,9 @@ function loadWhatsAppProduction(){
   document.head.appendChild(s);
 }
 function loadRegressionPanel(){
-  if(document.querySelector('script[data-tm-regression-core]'))return;
+  var existing=document.querySelector('script[data-tm-regression-core]');
+  if(existing && window.TAURUS_REGRESSION && window.TAURUS_REGRESSION.version==='2026-11-04.10')return;
+  if(existing)existing.remove();
   var core=document.createElement('script');
   core.src='taurus-regression-core.js?v='+Date.now();
   core.async=false;
