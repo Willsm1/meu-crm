@@ -10,13 +10,16 @@ function histDiag(type,extra){
     console.warn('[Taurus HistoryDiag]',row);
     try{
       const api=window.TM_WA_RUNTIME&&window.TM_WA_RUNTIME.api;
-      if(typeof api==='function')api('/api/whatsapp/diagnostics/history-ui',{method:'POST',body:JSON.stringify({
-        type:row.type,
-        buttonText:row.extra&&row.extra.buttonText,
-        modalText:row.extra&&(row.extra.modalText||row.extra.text||row.extra.prevText),
-        historyShell:row.extra&&row.extra.historyShell,
-        href:location.href
-      })}).catch(()=>{});
+      if(typeof api==='function'){
+        const qs=new URLSearchParams({
+          type:String(row.type||''),
+          path:String(location.pathname||''),
+          framed:String(window.top!==window),
+          shell:String(!!document.querySelector('.tm-wa-wa-shell')),
+          button:String((document.getElementById('tm-wa-events-btn')||{}).textContent||'')
+        });
+        api('/api/whatsapp/diagnostics/history-ui?'+qs.toString(),{method:'POST'}).catch(()=>{});
+      }
     }catch(_e){}
   }catch(_e){}
 }
