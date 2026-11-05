@@ -12,34 +12,10 @@
 <script>
 (function(){
 'use strict';
-var PIN='d4b52b150feadd97389efc65629cd13548ee54c7';
-var CDN='https://cdn.jsdelivr.net/gh/Willsm1/meu-crm@'+PIN+'/';
-var CURRENT='./';
-var files=[
-  ['tm-wa-bridge',CDN+'whatsapp-followup-bridge.js?v='+PIN],
-  ['tm-wa-followup',CDN+'crm-whatsapp-followup-visual.js?v='+PIN],
-  ['tm-wa-matching',CDN+'crm-whatsapp-matching-visual.js?v='+PIN],
-  ['tm-wa-gpt',CDN+'crm-whatsapp-gpt-briefing.js?v='+PIN],
-  ['tm-wa-history-range',CDN+'crm-whatsapp-history-range.js?v='+PIN],
-  ['tm-wa-archive',CDN+'crm-whatsapp-archive-ui.js?v='+PIN],
-  ['tm-wa-storage',CDN+'crm-whatsapp-storage-gate.js?v='+PIN],
-  ['tm-wa-media',CDN+'crm-whatsapp-media-preview.js?v='+PIN],
-  ['tm-wa-archive-hotfix',CDN+'crm-whatsapp-archive-hotfix.js?v='+PIN],
-  ['tm-wa-ai-direct',CDN+'crm-whatsapp-ai-direct.js?v='+PIN],
-  ['tm-wa-runtime',CURRENT+'crm-whatsapp-runtime.js?v=20261001-3'],
-  ['tm-wa-bridge-hosted',CURRENT+'whatsapp-followup-bridge-hosted.js?v=20261001-1'],
-  ['tm-wa-followup-hosted',CURRENT+'crm-whatsapp-followup-hosted-adapter.js?v=20261001-2'],
-  ['tm-wa-connections',CURRENT+'crm-whatsapp-connections.js?v=20261001-2']
-];
 var f=document.getElementById('crm'),status=document.getElementById('boot');
-function load(d,id,src){return new Promise(function(ok,fail){if(d.getElementById(id))return ok();var s=d.createElement('script');s.id=id;s.src=src;s.onload=ok;s.onerror=function(){fail(new Error(src));};d.body.appendChild(s);});}
 f.addEventListener('load',function(){
-  try{
-    var d=f.contentDocument,p=Promise.resolve();
-    files.forEach(function(x){p=p.then(function(){return load(d,x[0],x[1]);});});
-    p.then(function(){status.textContent='Taurus Next · gateway + Follow-up hospedados';setTimeout(function(){status.style.opacity='.35';},2500);})
-     .catch(function(e){status.textContent='Falha ao carregar '+e.message;status.style.color='#fca5a5';});
-  }catch(e){status.textContent='Falha na prévia: '+e.message;status.style.color='#fca5a5';}
+  status.textContent='Taurus Next · módulos de produção carregados pelo CRM';
+  setTimeout(function(){status.style.opacity='.35';},2500);
 });
 })();
 </script>
