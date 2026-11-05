@@ -169,3 +169,7 @@ require(wa_loader, "crm-whatsapp-history-range.js?v=20261104-scroll-media11", "h
 
 require(regression_core, "20261104-scroll-media11", "runtime regression cache check matches current WhatsApp history asset")
 require(regression_core, "2026-11-04.10", "runtime regression core version bumped for current history cache contract")
+
+require(regression_core, "executive-scope-isolated", "Anti-Regressao audits executive data isolation")
+require(regression_core, "executive_scope_audit", "Anti-Regressao calls live executive scope audit RPC")
+require(regression_core, "2026-11-05.1", "Anti-Regressao version includes executive scope security audit")
