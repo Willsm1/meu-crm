@@ -6,7 +6,7 @@ if(window.TAURUS_REGRESSION)return;
 const cells=new Map();
 const tests=[];
 const runtimeErrors=[];
-const VERSION='2026-11-03.8';
+const VERSION='2026-11-04.9';
 
 function now(){return Date.now()}
 function makeRunId(){
@@ -344,6 +344,10 @@ registerTest('whatsapp',{id:'auth-token',label:'Token disponível para gateway',
 registerTest('whatsapp',{id:'sessions-endpoint',label:'Endpoint de sessões responde',source:'/api/whatsapp/sessions',run:async({wa})=>{const d=await wa('/api/whatsapp/sessions');return {details:(d.sessions||[]).length+' sessão(ões)'}}});
 registerTest('whatsapp',{id:'candidates-endpoint',label:'Endpoint de captura/follow-up responde',source:'/api/whatsapp/followup/candidates',run:async({wa,assert})=>{const d=await wa('/api/whatsapp/followup/candidates?limit=5');assert(d&&d.mode==='hosted','gateway fora do modo hosted',d);return {details:'eventos '+Number(d.count||0)+' · persistência '+String(d.mediaPersistence||'n/a')}}});
 ['tm-wa-runtime','tm-wa-followup','tm-wa-matching','tm-wa-history-range','tm-wa-archive','tm-wa-bridge-hosted','tm-wa-followup-hosted','tm-wa-connections'].forEach(id=>registerTest('whatsapp',{id:'script-'+id,label:'Módulo '+id+' carregado',source:'#'+id,run:({assert,script})=>assert(script(id),'script ausente: '+id)}));
+registerTest('whatsapp',{id:'history-opener',label:'Novo histórico WhatsApp disponível',severity:'critical',run:({assert})=>{assert(typeof window.TM_WA_HISTORY_OPEN==='function','opener do novo histórico ausente');return {details:'TM_WA_HISTORY_OPEN ativo'}}});
+registerTest('whatsapp',{id:'history-singleton',label:'Histórico WhatsApp sem módulo duplicado',severity:'critical',run:({assert})=>{const n=document.querySelectorAll('#tm-wa-history-range').length;assert(n===1,'módulo de histórico duplicado: '+n);return {details:'1 módulo de histórico'}}});
+registerTest('whatsapp',{id:'history-button-owner',label:'Botão aponta para Histórico WhatsApp novo',severity:'critical',run:({assert})=>{const b=document.getElementById('tm-wa-events-btn');if(!b)return {status:'skipped',details:'botão ainda não renderizado nesta tela'};assert(/Histórico WhatsApp/i.test(String(b.textContent||'')),'botão voltou ao rótulo legado: '+String(b.textContent||''));return {details:'botão sob ownership do histórico novo'}}});
+registerTest('whatsapp',{id:'history-cache-version',label:'Histórico atual sem cache legado',severity:'major',run:({assert})=>{const s=document.getElementById('tm-wa-history-range');assert(!!s,'script de histórico ausente');assert(/20261104-conversation2/.test(String(s.src||'')),'versão antiga do histórico carregada: '+String(s.src||''));return {details:'cache version atual'}}});
 
 /* Media */
 ['tm-wa-hosted-media-compat','tm-wa-storage','tm-wa-media','tm-wa-archive-hotfix'].forEach(id=>registerTest('media',{id:'script-'+id,label:'Módulo '+id+' carregado',source:'#'+id,run:({assert,script})=>assert(script(id),'script ausente: '+id)}));
