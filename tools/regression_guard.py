@@ -125,6 +125,8 @@ require(wa_history, "tm-wa-wa-shell", "WhatsApp-style conversation shell preserv
 require(wa_history, "TM_WA_HISTORY_OPEN", "conversation history global opener preserved")
 require(wa_history, "stopImmediatePropagation", "legacy history click blocked")
 require(wa_history, "__TM_WA_HISTORY_DIAG__", "temporary history runtime diagnostics present")
+require(wa_history, "new URLSearchParams", "safe history path diagnostic query params present")
+require(wa_loader, "crm-whatsapp-history-range.js?v=20261104-path-probe8", "history path probe cache version")
 require(gateway, "/api/whatsapp/diagnostics/history-ui", "temporary authenticated history diagnostic endpoint present")
 require(wa_history, "whatsapp_media_for_lead", "conversation media hydration preserved")
 require(wa_history, "Somente histórico", "read-only conversation mode preserved")
