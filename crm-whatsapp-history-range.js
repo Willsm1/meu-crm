@@ -113,7 +113,7 @@ async function loadMediaAsset(btn,m){
   }catch(err){btn.disabled=false;btn.textContent='Falha ao abrir · tentar novamente'}
 }
 function bindMedia(root,mediaById){
-  const buttons=$('[data-wa-media]',root),scrollRoot=$('.tm-wa-wa-chat-body',root)||null;
+  const buttons=$$('[data-wa-media]',root),scrollRoot=$('.tm-wa-wa-chat-body',root)||null;
   let io=null;
   if('IntersectionObserver' in window){
     io=new IntersectionObserver(entries=>{
