@@ -78,8 +78,8 @@ require(wa_loader, 'whatsapp-followup-bridge-hosted.js', 'hosted Follow-up bridg
 require(wa_loader, 'crm-whatsapp-followup-hosted-adapter.js', 'hosted KPI adapter loaded', 1)
 require(wa_loader, 'crm-whatsapp-connections.js', 'multi-WhatsApp manager loaded', 1)
 forbid(taurus_next, "cdn.jsdelivr.net/gh/Willsm1/meu-crm@", "duplicate pinned WhatsApp stack in Taurus Next")
-require(taurus_next, "crm-whatsapp-history-range.js?v=20261104-forced-history7", "forced current WhatsApp history module in Taurus Next")
-require(taurus_next, "w.__TM_WA_HISTORY_RANGE__=false", "old history guard reset before forced reload")
+require(taurus_next, "crm.html?nextboot=20261104-clean1", "Taurus Next clean CRM boot source")
+require(taurus_next, "supabase-realtime.js?v=20261104-next-clean1", "Taurus Next fresh realtime root before iframe execution")
 require(wa_loader, "crm-whatsapp-history-range.js?v=20261104-runtime-diag4", "diagnostic conversation history cache version")
 require(wa_loader, "crm-whatsapp-followup-visual.js?v=20261104-history-owner3", "current follow-up history ownership cache version")
 require(wa_media_compat, 'isLegacyMedia', 'legacy media source translated')
@@ -137,3 +137,4 @@ if errors:
     sys.exit(1)
 
 print("REGRESSION GUARD: PASS")
+
